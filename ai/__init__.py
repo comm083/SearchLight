@@ -1,1 +1,2 @@
-// placeholder for AI package initialization
+# // placeholder for AI package initialization
+# 예시
