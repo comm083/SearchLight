@@ -3,6 +3,8 @@ fastapi
 uvicorn
 sqlalchemy
 pydantic
+supabase
+python-dotenv
 
 # AI & NLP
 transformers
