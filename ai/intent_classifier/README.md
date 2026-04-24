@@ -14,4 +14,4 @@
 | :------------------------- | :-------------------------- | :--------------------------- | :------------------------------------------ |
 | **A (Data 엔지니어)**      | **정형 데이터 & 인프라**    | SQLite, Pandas, FastAPI      | `yolo_events` DB, 시간 기반 필터링 모듈     |
 | **B (AI 엔지니어 - 검색)** | **비정형 데이터 & RAG**     | FAISS, Sentence-Transformers | `scene_descriptions` 벡터 인덱스, 검색 엔진 |
-| **C (AI 엔지니어 - NLP)**  | **의도 분류 & 데이터 증강** | KoELECTRA, PyTorch, GPT API  | `Intent Dataset`, 질문 분류 모델(5종)       |
+| **C (AI 엔지니어 - NLP)**  | **의도 분류 & 데이터 증강** | KoELECTRA, PyTorch, GPT API  | `Intent Dataset`, 질문 분류(5종)       |
