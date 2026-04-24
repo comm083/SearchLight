@@ -1,152 +1,650 @@
 [
-  {"id": 1, "description": "빨간색 패딩을 입은 남자가 골목길을 급하게 뛰어감"},
-  {"id": 2, "description": "검은색 세단이 신호를 위반하고 교차로를 지나감"},
-  {"id": 3, "description": "파란색 모자를 쓴 사람이 자전거를 타고 횡단보도를 건넘"},
-  {"id": 4, "description": "두 사람이 편의점 앞에서 대화를 나누고 있음"},
-  {"id": 5, "description": "밤늦게 한 여성이 스마트폰을 보며 걸어가고 있음"},
-  {"id": 6, "description": "초록색 가방을 멘 학생이 버스 정류장에서 버스를 기다림"},
-  {"id": 7, "description": "노란색 우산을 쓴 아이가 비 오는 거리를 걸어감"},
-  {"id": 8, "description": "중년 남성이 벤치에 앉아 신문을 읽고 있음"},
-  {"id": 9, "description": "강아지와 함께 산책하는 여성이 공원을 지나감"},
-  {"id": 10, "description": "흰색 트럭이 주차장 입구에서 후진하고 있음"},
-  {"id": 11, "description": "오토바이 배달원이 인도로 주행하며 지나감"},
-  {"id": 12, "description": "검은 마스크를 쓴 남자가 주변을 두리번거리며 서 있음"},
-  {"id": 13, "description": "회색 후드티를 입은 사람이 주차된 차들의 창문을 엿봄"},
-  {"id": 14, "description": "두 남자가 길거리에서 언성을 높이며 밀치고 있음"},
-  {"id": 15, "description": "어떤 사람이 길을 걷다 갑자기 바닥에 쓰러짐"},
-  {"id": 16, "description": "쓰레기통 부근에서 연기가 피어오르고 있음"},
-  {"id": 17, "description": "건물 뒷골목에서 불꽃이 번지기 시작함"},
-  {"id": 18, "description": "교차로에서 흰색 승용차와 오토바이가 충돌함"},
-  {"id": 19, "description": "경찰차가 경광등을 켜고 빠른 속도로 지나감"},
-  {"id": 20, "description": "구급차가 사이렌을 울리며 건물 앞에 도착함"},
-  {"id": 21, "description": "한 무리의 청소년들이 놀이터에서 모여 담배를 피움"},
-  {"id": 22, "description": "마스크와 모자로 얼굴을 가린 남자가 담을 넘으려 함"},
-  {"id": 23, "description": "카페 야외 테이블에 놓인 지갑을 누군가 집어감"},
-  {"id": 24, "description": "빨간 불인데 보행자가 무단횡단을 하고 있음"},
-  {"id": 25, "description": "지팡이를 짚은 노인이 횡단보도를 천천히 건너고 있음"},
-  {"id": 26, "description": "자전거를 타던 사람이 빙판길에 미끄러져 넘어짐"},
-  {"id": 27, "description": "킥보드를 탄 두 명이 헬멧 없이 인도를 질주함"},
-  {"id": 28, "description": "주차된 차량을 다른 차가 긁고 그냥 지나감"},
-  {"id": 29, "description": "술에 취한 듯 비틀거리는 남자가 길가에 주저앉음"},
-  {"id": 30, "description": "가로등 밑에서 한 사람이 누군가를 계속 기다리고 있음"},
-  {"id": 31, "description": "흰색 모자를 쓴 남성이 현금인출기 주변을 계속 서성임"},
-  {"id": 32, "description": "유모차를 끄는 여성이 횡단보도 앞에서 대기함"},
-  {"id": 33, "description": "택시에서 내린 승객이 짐을 놔두고 길을 건넘"},
-  {"id": 34, "description": "비상등을 켠 트럭이 도로 1차선에 멈춰 서 있음"},
-  {"id": 35, "description": "가게 앞에 진열된 물건을 보고 한 사람이 그냥 들고 감"},
-  {"id": 36, "description": "여러 명의 사람들이 출입구 쪽으로 급하게 도망침"},
-  {"id": 37, "description": "어두운 골목길에서 손전등 불빛이 여러 번 깜빡임"},
-  {"id": 38, "description": "폐지 줍는 어르신이 수레를 끌고 차도 가로 지나감"},
-  {"id": 39, "description": "빨간색 스포츠카가 굉음을 내며 도로를 질주함"},
-  {"id": 40, "description": "어린아이가 보호자 없이 도로 쪽으로 뛰어감"},
-  {"id": 41, "description": "검은색 패딩을 입은 사람이 담장 옆에 쭈그리고 앉음"},
-  {"id": 42, "description": "누군가 도로 위에 커다란 박스를 떨어뜨리고 감"},
-  {"id": 43, "description": "우산을 쓰지 않은 사람이 비를 맞으며 달리고 있음"},
-  {"id": 44, "description": "건설 현장 근처에서 철근이 무너져 내리는 모습"},
-  {"id": 45, "description": "가방을 들고 가는 여성의 뒤를 어떤 남자가 계속 따라감"},
-  {"id": 46, "description": "건물 옥상에서 누군가 아래를 내려다보고 있음"},
-  {"id": 47, "description": "편의점 안에서 손님과 점원이 계산대 앞에서 실랑이를 벌임"},
-  {"id": 48, "description": "도로 한가운데에 버려진 자전거가 통행을 방해함"},
-  {"id": 49, "description": "가로수가 강풍에 심하게 흔들리며 나뭇가지가 꺾임"},
-  {"id": 50, "description": "경찰관 두 명이 순찰을 돌며 주변 상가를 확인하고 있음"},
-  {"id": 51, "description": "한 남성이 무인 편의점에 들어와 바구니에 과자를 담고 있음"},
-  {"id": 52, "description": "교복을 입은 학생 두 명이 아이스크림 냉동고 안을 들여다봄"},
-  {"id": 53, "description": "여성이 결제 키오스크 바코드 스캐너에 음료수를 스캔함"},
-  {"id": 54, "description": "중년 남성이 신용카드를 키오스크에 꽂고 결제를 완료함"},
-  {"id": 55, "description": "어린아이가 혼자 들어와 젤리를 고르고 있음"},
-  {"id": 56, "description": "헬멧을 쓴 배달원이 들어와 진열대를 빠르게 훑어봄"},
-  {"id": 57, "description": "손님이 물건을 고른 후 결제하지 않고 그냥 밖으로 나감"},
-  {"id": 58, "description": "검은 마스크를 쓴 남자가 주변을 살피며 과자를 주머니에 숨김"},
-  {"id": 59, "description": "가방을 멘 학생이 물건을 가방 안에 몰래 집어넣음"},
-  {"id": 60, "description": "결제 키오스크 앞에서 카드가 인식되지 않아 손님이 짜증을 냄"},
-  {"id": 61, "description": "키오스크 화면을 주먹으로 세게 내리치는 남성이 있음"},
-  {"id": 62, "description": "결제 기계에 현금이 들어가지 않아 손님이 기계를 발로 참"},
-  {"id": 63, "description": "한 무리의 청소년들이 매장 안 테이블을 차지하고 시끄럽게 떠듦"},
-  {"id": 64, "description": "새벽 시간, 술에 취한 사람이 매장 바닥에 누워 잠을 잠"},
-  {"id": 65, "description": "외부에서 사 온 컵라면과 술을 매장 테이블에서 먹고 있음"},
-  {"id": 66, "description": "매장 바닥에 음료수를 쏟고 치우지 않은 채 그대로 나감"},
-  {"id": 67, "description": "손님이 냉장고 문을 열어둔 채로 한참 동안 물건을 고름"},
-  {"id": 68, "description": "애완견을 안고 들어온 손님이 진열대 사이를 돌아다님"},
-  {"id": 69, "description": "매장 안에 자전거를 끌고 들어와 통로를 막음"},
-  {"id": 70, "description": "우산에서 떨어지는 빗물로 바닥이 흥건해짐"},
-  {"id": 71, "description": "바닥에 고인 빗물에 미끄러져 손님이 크게 넘어짐"},
-  {"id": 72, "description": "두 손님이 특정 물건을 두고 서로 먼저 잡으려다 실랑이를 벌임"},
-  {"id": 73, "description": "매장 내부 쓰레기통이 꽉 차서 쓰레기가 바닥에 넘쳐흐름"},
-  {"id": 74, "description": "손님이 진열대 앞 바닥에 쓰레기를 몰래 버리고 감"},
-  {"id": 75, "description": "술 취한 남자가 편의점 유리창을 밖에서 세게 두드림"},
-  {"id": 76, "description": "어두운 밤, 누군가 손전등을 켜고 매장 안을 기웃거림"},
-  {"id": 77, "description": "키오스크 결제 내역 영수증을 바닥에 무단으로 버림"},
-  {"id": 78, "description": "손님이 전자레인지에 음식을 넣고 돌리다 연기가 발생함"},
-  {"id": 79, "description": "전자레인지 안에서 작은 불꽃이 튀어 손님이 놀람"},
-  {"id": 80, "description": "아이스크림 냉동고 문이 열린 채로 방치되어 냉기가 빠져나감"},
-  {"id": 81, "description": "물건이 진열대에서 떨어져 바닥에 뒹굴고 있음"},
-  {"id": 82, "description": "누군가 진열대의 가격표를 고의로 뜯어내거나 바꿔침"},
-  {"id": 83, "description": "비닐봉투를 결제하지 않고 무단으로 여러 장 뜯어감"},
-  {"id": 84, "description": "매장 내 CCTV 카메라를 우산으로 가리려는 시도가 포착됨"},
-  {"id": 85, "description": "벽에 부착된 안내문을 손님이 임의로 떼어버림"},
-  {"id": 86, "description": "편의점 구석에서 교복 입은 학생들이 담배를 피움"},
-  {"id": 87, "description": "누군가 침낭을 가져와 편의점 테이블 위에서 잠을 청함"},
-  {"id": 88, "description": "노숙자로 보이는 사람이 들어와 한참 동안 나가지 않음"},
-  {"id": 89, "description": "매장 밖에서 누군가 편의점 안쪽을 오랫동안 응시함"},
-  {"id": 90, "description": "키오스크에 연결된 바코드 스캐너 선을 억지로 당김"},
-  {"id": 91, "description": "물건 10개를 바구니에 담았으나 키오스크에서는 1개만 결제함"},
-  {"id": 92, "description": "비싼 물건의 바코드 대신 저렴한 물건의 바코드를 스캔함"},
-  {"id": 93, "description": "손님이 매장에 들어오려다 문이 안 열려서 문을 흔듦"},
-  {"id": 94, "description": "매장 내에서 마스크를 쓰지 않은 손님이 기침을 심하게 함"},
-  {"id": 95, "description": "손님이 갑자기 가슴을 부여잡고 결제대 앞에 쓰러짐"},
-  {"id": 96, "description": "어린아이가 킥보드를 타고 매장 안을 빠르게 돌아다님"},
-  {"id": 97, "description": "두 사람이 함께 들어왔다가 한 명은 망을 보고 한 명은 물건을 훔침"},
-  {"id": 98, "description": "결제 전 물건을 매장 내에서 뜯어 먹은 후 빈 껍질을 버림"},
-  {"id": 99, "description": "키오스크 옆에 있는 고객용 손소독제를 통째로 훔쳐감"},
-  {"id": 100, "description": "여러 명의 손님이 몰려들어 결제 줄이 매장 밖까지 이어짐"},
-  {"id": 101, "description": "매장 내부 전등이 갑자기 깜빡거리다 꺼짐"},
-  {"id": 102, "description": "비상구 안내등이 떨어져 바닥에 뒹굴고 있음"},
-  {"id": 103, "description": "취객이 진열대를 짚다가 진열대가 쓰러져 물건이 쏟아짐"},
-  {"id": 104, "description": "손님이 매장에 휴대전화를 두고 밖으로 급하게 나감"},
-  {"id": 105, "description": "분실된 휴대전화를 다른 손님이 발견하고 자신의 주머니에 넣음"},
-  {"id": 106, "description": "매장 내 설치된 쓰레기통을 누군가 발로 차서 넘어뜨림"},
-  {"id": 107, "description": "결제 후 남겨진 카드를 다음 손님이 챙겨서 나감"},
-  {"id": 108, "description": "바코드 인식이 안 되자 손님이 해당 물건을 키오스크 위에 버리고 감"},
-  {"id": 109, "description": "야간 시간대, 문이 잠기지 않아 길고양이가 매장 안으로 들어옴"},
-  {"id": 110, "description": "손님이 컵라면에 뜨거운 물을 받다가 바닥에 흘림"},
-  {"id": 111, "description": "뜨거운 물이 나오는 온수기를 고장 낸 후 그냥 도망감"},
-  {"id": 112, "description": "아이스컵에 결제하지 않은 음료를 몰래 담아서 나감"},
-  {"id": 113, "description": "편의점 앞 주차된 오토바이가 매장 입구를 완전히 가로막음"},
-  {"id": 114, "description": "택배 기사가 박스를 여러 개 들고 와서 매장 구석에 쌓아둠"},
-  {"id": 115, "description": "누군가 매장 내 콘센트에 개인 전자기기를 여러 개 꽂아 충전함"},
-  {"id": 116, "description": "비 오는 날 진흙 묻은 신발로 매장 전체를 더럽히고 돌아다님"},
-  {"id": 117, "description": "동전 교환기에 지폐를 넣고 동전이 나오지 않자 기계를 흔듦"},
-  {"id": 118, "description": "어떤 사람이 바구니에 물건을 가득 담은 채 그대로 들고 도주함"},
-  {"id": 119, "description": "매장 내부에서 우산을 펼쳐 들고 장난을 치는 학생들"},
-  {"id": 120, "description": "비치된 일회용 젓가락과 숟가락을 한 움큼 집어 가방에 넣음"},
-  {"id": 121, "description": "거스름돈 나오는 곳에 손을 집어넣고 무언가 빼내려 시도함"},
-  {"id": 122, "description": "매장 밖에서 담배를 피우던 연기가 열린 문틈으로 계속 들어옴"},
-  {"id": 123, "description": "결제가 정상적으로 처리되지 않았는데 안내음을 무시하고 나감"},
-  {"id": 124, "description": "물건 포장지를 몰래 뜯어 내용물만 주머니에 넣고 포장지는 구석에 숨김"},
-  {"id": 125, "description": "손님이 냉장고 안의 진열 상태를 엉망으로 섞어놓음"},
-  {"id": 126, "description": "아이스크림을 입에 문 채로 들어와 구경만 하고 나감"},
-  {"id": 127, "description": "현금 인출기(ATM) 앞에서 오랫동안 여러 카드를 돌려가며 사용함"},
-  {"id": 128, "description": "ATM 기계 화면에 오류 창이 떴으나 조치 없이 방치됨"},
-  {"id": 129, "description": "손님이 매장 내에서 스피커폰으로 통화하며 크게 소란을 피움"},
-  {"id": 130, "description": "화장실을 찾지 못해 매장 구석에서 방뇨하는 취객"},
-  {"id": 131, "description": "구입한 복권을 긁은 후 꽝이 나오자 찢어서 바닥에 흩뿌림"},
-  {"id": 132, "description": "손님이 진열된 물건을 떨어뜨려 파손시켰으나 모른 척함"},
-  {"id": 133, "description": "우산을 쓰지 않은 만취자가 문을 열지 못해 유리에 얼굴을 부딪힘"},
-  {"id": 134, "description": "매장 천장에 달린 장식물이나 거울을 점프해서 치려고 시도함"},
-  {"id": 135, "description": "한 사람이 결제하는 동안 뒤의 일행이 물건을 빼돌림"},
-  {"id": 136, "description": "진열된 빵을 손으로 꾹꾹 눌러서 찌그러뜨리고 다른 빵을 사 감"},
-  {"id": 137, "description": "손님이 가져온 외부 쓰레기를 편의점 쓰레기통에 전부 투기함"},
-  {"id": 138, "description": "결제 수단이 없는 어린아이가 매장에 들어와 물건만 쳐다보고 있음"},
-  {"id": 139, "description": "신원 미상의 인물이 모자와 마스크, 선글라스를 착용한 채 입장함"},
-  {"id": 140, "description": "갑작스러운 폭우에 비를 피하려는 사람들이 매장에 가득 참"},
-  {"id": 141, "description": "손님이 실수로 커피 머신의 컵을 놓치지 않아 커피가 넘쳐흐름"},
-  {"id": 142, "description": "커피 머신 주변에 설탕과 시럽이 잔뜩 묻어 끈적하게 방치됨"},
-  {"id": 143, "description": "키오스크 음성 안내 볼륨을 누군가 임의로 최대로 키워놓음"},
-  {"id": 144, "description": "매장에 진입하려는 휠체어가 문턱에 걸려 들어오지 못하고 있음"},
-  {"id": 145, "description": "진열대에 놓인 모든 유제품의 유통기한만 확인하고 내려놓음"},
-  {"id": 146, "description": "손님이 자신의 모습을 핸드폰으로 촬영하며 매장 안을 돌아다님"},
-  {"id": 147, "description": "물건을 모두 바닥에 내려놓고 사진을 찍은 뒤 그냥 나감"},
-  {"id": 148, "description": "결제 후 자신이 가져온 장바구니에 물건을 정리하느라 뒤 손님을 방해함"},
-  {"id": 149, "description": "손님이 100원짜리 동전 수십 개를 쏟아내며 키오스크에 계속 밀어 넣음"},
-  {"id": 150, "description": "무인 편의점 출입문이 닫히지 않고 계속 열려 있는 상태로 방치됨"}
+  {
+    "id": 1,
+    "description": "빨간색 패딩을 입은 남자가 골목길을 급하게 뛰어감",
+    "image_path": "/static/images/normal1.png"
+  },
+  {
+    "id": 2,
+    "description": "검은색 세단이 신호를 위반하고 교차로를 지나감",
+    "image_path": "/static/images/normal2.png"
+  },
+  {
+    "id": 3,
+    "description": "파란색 모자를 쓴 사람이 자전거를 타고 횡단보도를 건넘",
+    "image_path": "/static/images/normal3.png"
+  },
+  {
+    "id": 4,
+    "description": "두 사람이 편의점 앞에서 대화를 나누고 있음",
+    "image_path": "/static/images/normal4.png"
+  },
+  {
+    "id": 5,
+    "description": "밤늦게 한 여성이 스마트폰을 보며 걸어가고 있음",
+    "image_path": "/static/images/normal5.png"
+  },
+  {
+    "id": 6,
+    "description": "초록색 가방을 멘 학생이 버스 정류장에서 버스를 기다림",
+    "image_path": "/static/images/normal6.png"
+  },
+  {
+    "id": 7,
+    "description": "노란색 우산을 쓴 아이가 비 오는 거리를 걸어감",
+    "image_path": "/static/images/normal7.png"
+  },
+  {
+    "id": 8,
+    "description": "중년 남성이 벤치에 앉아 신문을 읽고 있음",
+    "image_path": "/static/images/normal8.png"
+  },
+  {
+    "id": 9,
+    "description": "강아지와 함께 산책하는 여성이 공원을 지나감",
+    "image_path": "/static/images/normal9.png"
+  },
+  {
+    "id": 10,
+    "description": "흰색 트럭이 주차장 입구에서 후진하고 있음",
+    "image_path": "/static/images/normal10.png"
+  },
+  {
+    "id": 11,
+    "description": "오토바이 배달원이 인도로 주행하며 지나감"
+  },
+  {
+    "id": 12,
+    "description": "검은 마스크를 쓴 남자가 주변을 두리번거리며 서 있음"
+  },
+  {
+    "id": 13,
+    "description": "회색 후드티를 입은 사람이 주차된 차들의 창문을 엿봄"
+  },
+  {
+    "id": 14,
+    "description": "두 남자가 길거리에서 언성을 높이며 밀치고 있음",
+    "image_path": "/static/images/assault1.png"
+  },
+  {
+    "id": 15,
+    "description": "어떤 사람이 길을 걷다 갑자기 바닥에 쓰러짐",
+    "image_path": "/static/images/assault2.png"
+  },
+  {
+    "id": 16,
+    "description": "쓰레기통 부근에서 연기가 피어오르고 있음",
+    "image_path": "/static/images/falling1.png"
+  },
+  {
+    "id": 17,
+    "description": "건물 뒷골목에서 불꽃이 번지기 시작함",
+    "image_path": "/static/images/arson1.png"
+  },
+  {
+    "id": 18,
+    "description": "교차로에서 흰색 승용차와 오토바이가 충돌함",
+    "image_path": "/static/images/arson2.png"
+  },
+  {
+    "id": 19,
+    "description": "경찰차가 경광등을 켜고 빠른 속도로 지나감"
+  },
+  {
+    "id": 20,
+    "description": "구급차가 사이렌을 울리며 건물 앞에 도착함"
+  },
+  {
+    "id": 21,
+    "description": "한 무리의 청소년들이 놀이터에서 모여 담배를 피움"
+  },
+  {
+    "id": 22,
+    "description": "마스크와 모자로 얼굴을 가린 남자가 담을 넘으려 함"
+  },
+  {
+    "id": 23,
+    "description": "카페 야외 테이블에 놓인 지갑을 누군가 집어감"
+  },
+  {
+    "id": 24,
+    "description": "빨간 불인데 보행자가 무단횡단을 하고 있음"
+  },
+  {
+    "id": 25,
+    "description": "지팡이를 짚은 노인이 횡단보도를 천천히 건너고 있음"
+  },
+  {
+    "id": 26,
+    "description": "자전거를 타던 사람이 빙판길에 미끄러져 넘어짐"
+  },
+  {
+    "id": 27,
+    "description": "킥보드를 탄 두 명이 헬멧 없이 인도를 질주함"
+  },
+  {
+    "id": 28,
+    "description": "주차된 차량을 다른 차가 긁고 그냥 지나감"
+  },
+  {
+    "id": 29,
+    "description": "술에 취한 듯 비틀거리는 남자가 길가에 주저앉음"
+  },
+  {
+    "id": 30,
+    "description": "가로등 밑에서 한 사람이 누군가를 계속 기다리고 있음"
+  },
+  {
+    "id": 31,
+    "description": "흰색 모자를 쓴 남성이 현금인출기 주변을 계속 서성임"
+  },
+  {
+    "id": 32,
+    "description": "유모차를 끄는 여성이 횡단보도 앞에서 대기함"
+  },
+  {
+    "id": 33,
+    "description": "택시에서 내린 승객이 짐을 놔두고 길을 건넘"
+  },
+  {
+    "id": 34,
+    "description": "비상등을 켠 트럭이 도로 1차선에 멈춰 서 있음"
+  },
+  {
+    "id": 35,
+    "description": "가게 앞에 진열된 물건을 보고 한 사람이 그냥 들고 감"
+  },
+  {
+    "id": 36,
+    "description": "여러 명의 사람들이 출입구 쪽으로 급하게 도망침"
+  },
+  {
+    "id": 37,
+    "description": "어두운 골목길에서 손전등 불빛이 여러 번 깜빡임"
+  },
+  {
+    "id": 38,
+    "description": "폐지 줍는 어르신이 수레를 끌고 차도 가로 지나감"
+  },
+  {
+    "id": 39,
+    "description": "빨간색 스포츠카가 굉음을 내며 도로를 질주함"
+  },
+  {
+    "id": 40,
+    "description": "어린아이가 보호자 없이 도로 쪽으로 뛰어감"
+  },
+  {
+    "id": 41,
+    "description": "검은색 패딩을 입은 사람이 담장 옆에 쭈그리고 앉음"
+  },
+  {
+    "id": 42,
+    "description": "누군가 도로 위에 커다란 박스를 떨어뜨리고 감"
+  },
+  {
+    "id": 43,
+    "description": "우산을 쓰지 않은 사람이 비를 맞으며 달리고 있음",
+    "image_path": "/static/images/abandonment1.png"
+  },
+  {
+    "id": 44,
+    "description": "건설 현장 근처에서 철근이 무너져 내리는 모습"
+  },
+  {
+    "id": 45,
+    "description": "가방을 들고 가는 여성의 뒤를 어떤 남자가 계속 따라감"
+  },
+  {
+    "id": 46,
+    "description": "건물 옥상에서 누군가 아래를 내려다보고 있음"
+  },
+  {
+    "id": 47,
+    "description": "편의점 안에서 손님과 점원이 계산대 앞에서 실랑이를 벌임"
+  },
+  {
+    "id": 48,
+    "description": "도로 한가운데에 버려진 자전거가 통행을 방해함"
+  },
+  {
+    "id": 49,
+    "description": "가로수가 강풍에 심하게 흔들리며 나뭇가지가 꺾임"
+  },
+  {
+    "id": 50,
+    "description": "경찰관 두 명이 순찰을 돌며 주변 상가를 확인하고 있음"
+  },
+  {
+    "id": 51,
+    "description": "한 남성이 무인 편의점에 들어와 바구니에 과자를 담고 있음"
+  },
+  {
+    "id": 52,
+    "description": "교복을 입은 학생 두 명이 아이스크림 냉동고 안을 들여다봄"
+  },
+  {
+    "id": 53,
+    "description": "여성이 결제 키오스크 바코드 스캐너에 음료수를 스캔함"
+  },
+  {
+    "id": 54,
+    "description": "중년 남성이 신용카드를 키오스크에 꽂고 결제를 완료함"
+  },
+  {
+    "id": 55,
+    "description": "어린아이가 혼자 들어와 젤리를 고르고 있음"
+  },
+  {
+    "id": 56,
+    "description": "헬멧을 쓴 배달원이 들어와 진열대를 빠르게 훑어봄"
+  },
+  {
+    "id": 57,
+    "description": "손님이 물건을 고른 후 결제하지 않고 그냥 밖으로 나감"
+  },
+  {
+    "id": 58,
+    "description": "검은 마스크를 쓴 남자가 주변을 살피며 과자를 주머니에 숨김",
+    "image_path": "/static/images/thief1.png"
+  },
+  {
+    "id": 59,
+    "description": "가방을 멘 학생이 물건을 가방 안에 몰래 집어넣음",
+    "image_path": "/static/images/thief2.png"
+  },
+  {
+    "id": 60,
+    "description": "결제 키오스크 앞에서 카드가 인식되지 않아 손님이 짜증을 냄",
+    "image_path": "/static/images/thief3.png"
+  },
+  {
+    "id": 61,
+    "description": "키오스크 화면을 주먹으로 세게 내리치는 남성이 있음",
+    "image_path": "/static/images/break1.png"
+  },
+  {
+    "id": 62,
+    "description": "결제 기계에 현금이 들어가지 않아 손님이 기계를 발로 참",
+    "image_path": "/static/images/break2.png"
+  },
+  {
+    "id": 63,
+    "description": "한 무리의 청소년들이 매장 안 테이블을 차지하고 시끄럽게 떠듦"
+  },
+  {
+    "id": 64,
+    "description": "새벽 시간, 술에 취한 사람이 매장 바닥에 누워 잠을 잠"
+  },
+  {
+    "id": 65,
+    "description": "외부에서 사 온 컵라면과 술을 매장 테이블에서 먹고 있음"
+  },
+  {
+    "id": 66,
+    "description": "매장 바닥에 음료수를 쏟고 치우지 않은 채 그대로 나감"
+  },
+  {
+    "id": 67,
+    "description": "손님이 냉장고 문을 열어둔 채로 한참 동안 물건을 고름"
+  },
+  {
+    "id": 68,
+    "description": "애완견을 안고 들어온 손님이 진열대 사이를 돌아다님"
+  },
+  {
+    "id": 69,
+    "description": "매장 안에 자전거를 끌고 들어와 통로를 막음"
+  },
+  {
+    "id": 70,
+    "description": "우산에서 떨어지는 빗물로 바닥이 흥건해짐"
+  },
+  {
+    "id": 71,
+    "description": "바닥에 고인 빗물에 미끄러져 손님이 크게 넘어짐",
+    "image_path": "/static/images/falling2.png"
+  },
+  {
+    "id": 72,
+    "description": "두 손님이 특정 물건을 두고 서로 먼저 잡으려다 실랑이를 벌임",
+    "image_path": "/static/images/assault3.png"
+  },
+  {
+    "id": 73,
+    "description": "매장 내부 쓰레기통이 꽉 차서 쓰레기가 바닥에 넘쳐흐름",
+    "image_path": "/static/images/assault4.png"
+  },
+  {
+    "id": 74,
+    "description": "손님이 진열대 앞 바닥에 쓰레기를 몰래 버리고 감",
+    "image_path": "/static/images/abandonment2.png"
+  },
+  {
+    "id": 75,
+    "description": "술 취한 남자가 편의점 유리창을 밖에서 세게 두드림",
+    "image_path": "/static/images/assault5.png"
+  },
+  {
+    "id": 76,
+    "description": "어두운 밤, 누군가 손전등을 켜고 매장 안을 기웃거림"
+  },
+  {
+    "id": 77,
+    "description": "키오스크 결제 내역 영수증을 바닥에 무단으로 버림"
+  },
+  {
+    "id": 78,
+    "description": "손님이 전자레인지에 음식을 넣고 돌리다 연기가 발생함",
+    "image_path": "/static/images/arson3.png"
+  },
+  {
+    "id": 79,
+    "description": "전자레인지 안에서 작은 불꽃이 튀어 손님이 놀람",
+    "image_path": "/static/images/arson4.png"
+  },
+  {
+    "id": 80,
+    "description": "아이스크림 냉동고 문이 열린 채로 방치되어 냉기가 빠져나감"
+  },
+  {
+    "id": 81,
+    "description": "물건이 진열대에서 떨어져 바닥에 뒹굴고 있음"
+  },
+  {
+    "id": 82,
+    "description": "누군가 진열대의 가격표를 고의로 뜯어내거나 바꿔침"
+  },
+  {
+    "id": 83,
+    "description": "비닐봉투를 결제하지 않고 무단으로 여러 장 뜯어감"
+  },
+  {
+    "id": 84,
+    "description": "매장 내 CCTV 카메라를 우산으로 가리려는 시도가 포착됨"
+  },
+  {
+    "id": 85,
+    "description": "벽에 부착된 안내문을 손님이 임의로 떼어버림"
+  },
+  {
+    "id": 86,
+    "description": "편의점 구석에서 교복 입은 학생들이 담배를 피움"
+  },
+  {
+    "id": 87,
+    "description": "누군가 침낭을 가져와 편의점 테이블 위에서 잠을 청함"
+  },
+  {
+    "id": 88,
+    "description": "노숙자로 보이는 사람이 들어와 한참 동안 나가지 않음"
+  },
+  {
+    "id": 89,
+    "description": "매장 밖에서 누군가 편의점 안쪽을 오랫동안 응시함"
+  },
+  {
+    "id": 90,
+    "description": "키오스크에 연결된 바코드 스캐너 선을 억지로 당김"
+  },
+  {
+    "id": 91,
+    "description": "물건 10개를 바구니에 담았으나 키오스크에서는 1개만 결제함",
+    "image_path": "/static/images/thief4.png"
+  },
+  {
+    "id": 92,
+    "description": "비싼 물건의 바코드 대신 저렴한 물건의 바코드를 스캔함",
+    "image_path": "/static/images/thief5.png"
+  },
+  {
+    "id": 93,
+    "description": "손님이 매장에 들어오려다 문이 안 열려서 문을 흔듦"
+  },
+  {
+    "id": 94,
+    "description": "매장 내에서 마스크를 쓰지 않은 손님이 기침을 심하게 함"
+  },
+  {
+    "id": 95,
+    "description": "손님이 갑자기 가슴을 부여잡고 결제대 앞에 쓰러짐",
+    "image_path": "/static/images/falling3.png"
+  },
+  {
+    "id": 96,
+    "description": "어린아이가 킥보드를 타고 매장 안을 빠르게 돌아다님",
+    "image_path": "/static/images/falling4.png"
+  },
+  {
+    "id": 97,
+    "description": "두 사람이 함께 들어왔다가 한 명은 망을 보고 한 명은 물건을 훔침"
+  },
+  {
+    "id": 98,
+    "description": "결제 전 물건을 매장 내에서 뜯어 먹은 후 빈 껍질을 버림",
+    "image_path": "/static/images/thief6.png"
+  },
+  {
+    "id": 99,
+    "description": "키오스크 옆에 있는 고객용 손소독제를 통째로 훔쳐감",
+    "image_path": "/static/images/thief7.png"
+  },
+  {
+    "id": 100,
+    "description": "여러 명의 손님이 몰려들어 결제 줄이 매장 밖까지 이어짐"
+  },
+  {
+    "id": 101,
+    "description": "매장 내부 전등이 갑자기 깜빡거리다 꺼짐",
+    "image_path": "/static/images/break3.png"
+  },
+  {
+    "id": 102,
+    "description": "비상구 안내등이 떨어져 바닥에 뒹굴고 있음",
+    "image_path": "/static/images/break4.png"
+  },
+  {
+    "id": 103,
+    "description": "취객이 진열대를 짚다가 진열대가 쓰러져 물건이 쏟아짐",
+    "image_path": "/static/images/assault6.png"
+  },
+  {
+    "id": 104,
+    "description": "손님이 매장에 휴대전화를 두고 밖으로 급하게 나감"
+  },
+  {
+    "id": 105,
+    "description": "분실된 휴대전화를 다른 손님이 발견하고 자신의 주머니에 넣음"
+  },
+  {
+    "id": 106,
+    "description": "매장 내 설치된 쓰레기통을 누군가 발로 차서 넘어뜨림"
+  },
+  {
+    "id": 107,
+    "description": "결제 후 남겨진 카드를 다음 손님이 챙겨서 나감",
+    "image_path": "/static/images/abandonment3.png"
+  },
+  {
+    "id": 108,
+    "description": "바코드 인식이 안 되자 손님이 해당 물건을 키오스크 위에 버리고 감"
+  },
+  {
+    "id": 109,
+    "description": "야간 시간대, 문이 잠기지 않아 길고양이가 매장 안으로 들어옴"
+  },
+  {
+    "id": 110,
+    "description": "손님이 컵라면에 뜨거운 물을 받다가 바닥에 흘림"
+  },
+  {
+    "id": 111,
+    "description": "뜨거운 물이 나오는 온수기를 고장 낸 후 그냥 도망감",
+    "image_path": "/static/images/break5.png"
+  },
+  {
+    "id": 112,
+    "description": "아이스컵에 결제하지 않은 음료를 몰래 담아서 나감"
+  },
+  {
+    "id": 113,
+    "description": "편의점 앞 주차된 오토바이가 매장 입구를 완전히 가로막음"
+  },
+  {
+    "id": 114,
+    "description": "택배 기사가 박스를 여러 개 들고 와서 매장 구석에 쌓아둠",
+    "image_path": "/static/images/abandonment4.png"
+  },
+  {
+    "id": 115,
+    "description": "누군가 매장 내 콘센트에 개인 전자기기를 여러 개 꽂아 충전함"
+  },
+  {
+    "id": 116,
+    "description": "비 오는 날 진흙 묻은 신발로 매장 전체를 더럽히고 돌아다님"
+  },
+  {
+    "id": 117,
+    "description": "동전 교환기에 지폐를 넣고 동전이 나오지 않자 기계를 흔듦",
+    "image_path": "/static/images/break6.png"
+  },
+  {
+    "id": 118,
+    "description": "어떤 사람이 바구니에 물건을 가득 담은 채 그대로 들고 도주함",
+    "image_path": "/static/images/thief8.png"
+  },
+  {
+    "id": 119,
+    "description": "매장 내부에서 우산을 펼쳐 들고 장난을 치는 학생들",
+    "image_path": "/static/images/thief9.png"
+  },
+  {
+    "id": 120,
+    "description": "비치된 일회용 젓가락과 숟가락을 한 움큼 집어 가방에 넣음"
+  },
+  {
+    "id": 121,
+    "description": "거스름돈 나오는 곳에 손을 집어넣고 무언가 빼내려 시도함"
+  },
+  {
+    "id": 122,
+    "description": "매장 밖에서 담배를 피우던 연기가 열린 문틈으로 계속 들어옴"
+  },
+  {
+    "id": 123,
+    "description": "결제가 정상적으로 처리되지 않았는데 안내음을 무시하고 나감"
+  },
+  {
+    "id": 124,
+    "description": "물건 포장지를 몰래 뜯어 내용물만 주머니에 넣고 포장지는 구석에 숨김",
+    "image_path": "/static/images/thief10.png"
+  },
+  {
+    "id": 125,
+    "description": "손님이 냉장고 안의 진열 상태를 엉망으로 섞어놓음"
+  },
+  {
+    "id": 126,
+    "description": "아이스크림을 입에 문 채로 들어와 구경만 하고 나감"
+  },
+  {
+    "id": 127,
+    "description": "현금 인출기(ATM) 앞에서 오랫동안 여러 카드를 돌려가며 사용함"
+  },
+  {
+    "id": 128,
+    "description": "ATM 기계 화면에 오류 창이 떴으나 조치 없이 방치됨"
+  },
+  {
+    "id": 129,
+    "description": "손님이 매장 내에서 스피커폰으로 통화하며 크게 소란을 피움"
+  },
+  {
+    "id": 130,
+    "description": "화장실을 찾지 못해 매장 구석에서 방뇨하는 취객"
+  },
+  {
+    "id": 131,
+    "description": "구입한 복권을 긁은 후 꽝이 나오자 찢어서 바닥에 흩뿌림",
+    "image_path": "/static/images/falling5.png"
+  },
+  {
+    "id": 132,
+    "description": "손님이 진열된 물건을 떨어뜨려 파손시켰으나 모른 척함"
+  },
+  {
+    "id": 133,
+    "description": "우산을 쓰지 않은 만취자가 문을 열지 못해 유리에 얼굴을 부딪힘",
+    "image_path": "/static/images/falling6.png"
+  },
+  {
+    "id": 134,
+    "description": "매장 천장에 달린 장식물이나 거울을 점프해서 치려고 시도함"
+  },
+  {
+    "id": 135,
+    "description": "한 사람이 결제하는 동안 뒤의 일행이 물건을 빼돌림"
+  },
+  {
+    "id": 136,
+    "description": "진열된 빵을 손으로 꾹꾹 눌러서 찌그러뜨리고 다른 빵을 사 감"
+  },
+  {
+    "id": 137,
+    "description": "손님이 가져온 외부 쓰레기를 편의점 쓰레기통에 전부 투기함",
+    "image_path": "/static/images/abandonment5.png"
+  },
+  {
+    "id": 138,
+    "description": "결제 수단이 없는 어린아이가 매장에 들어와 물건만 쳐다보고 있음"
+  },
+  {
+    "id": 139,
+    "description": "신원 미상의 인물이 모자와 마스크, 선글라스를 착용한 채 입장함"
+  },
+  {
+    "id": 140,
+    "description": "갑작스러운 폭우에 비를 피하려는 사람들이 매장에 가득 참"
+  },
+  {
+    "id": 141,
+    "description": "손님이 실수로 커피 머신의 컵을 놓치지 않아 커피가 넘쳐흐름"
+  },
+  {
+    "id": 142,
+    "description": "커피 머신 주변에 설탕과 시럽이 잔뜩 묻어 끈적하게 방치됨",
+    "image_path": "/static/images/abandonment6.png"
+  },
+  {
+    "id": 143,
+    "description": "키오스크 음성 안내 볼륨을 누군가 임의로 최대로 키워놓음"
+  },
+  {
+    "id": 144,
+    "description": "매장에 진입하려는 휠체어가 문턱에 걸려 들어오지 못하고 있음"
+  },
+  {
+    "id": 145,
+    "description": "진열대에 놓인 모든 유제품의 유통기한만 확인하고 내려놓음"
+  },
+  {
+    "id": 146,
+    "description": "손님이 자신의 모습을 핸드폰으로 촬영하며 매장 안을 돌아다님"
+  },
+  {
+    "id": 147,
+    "description": "물건을 모두 바닥에 내려놓고 사진을 찍은 뒤 그냥 나감"
+  },
+  {
+    "id": 148,
+    "description": "결제 후 자신이 가져온 장바구니에 물건을 정리하느라 뒤 손님을 방해함"
+  },
+  {
+    "id": 149,
+    "description": "손님이 100원짜리 동전 수십 개를 쏟아내며 키오스크에 계속 밀어 넣음"
+  },
+  {
+    "id": 150,
+    "description": "무인 편의점 출입문이 닫히지 않고 계속 열려 있는 상태로 방치됨"
+  }
 ]
