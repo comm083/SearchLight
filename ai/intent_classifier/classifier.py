@@ -1,0 +1,124 @@
+import torch
+import torch.nn.functional as F
+from transformers import ElectraTokenizer, ElectraForSequenceClassification
+from torch.utils.data import DataLoader, Dataset
+
+# 의도 분류 카테고리
+INTENT_CLASSES = {
+    0: "조회", # 정보 확인
+    1: "위험", # 이상 상황 / 긴급
+    2: "장애", # 시스템 문제
+    3: "출입", # 사람/차량 이동
+    4: "일상"  # 일반 대화 / 비업무
+}
+
+class IntentDataset(Dataset):
+    """의도 분류 학습을 위한 PyTorch Dataset"""
+    def __init__(self, texts, labels, tokenizer, max_len=128):
+        self.texts = texts
+        self.labels = labels
+        self.tokenizer = tokenizer
+        self.max_len = max_len
+
+    def __len__(self):
+        return len(self.texts)
+
+    def __getitem__(self, item):
+        text = str(self.texts[item])
+        label = self.labels[item]
+
+        encoding = self.tokenizer.encode_plus(
+            text,
+            add_special_tokens=True,
+            max_length=self.max_len,
+            return_token_type_ids=False,
+            padding='max_length',
+            truncation=True,
+            return_attention_mask=True,
+            return_tensors='pt',
+        )
+
+        return {
+            'text': text,
+            'input_ids': encoding['input_ids'].flatten(),
+            'attention_mask': encoding['attention_mask'].flatten(),
+            'labels': torch.tensor(label, dtype=torch.long)
+        }
+
+class IntentClassifier:
+    """KoELECTRA 기반 의도 분류기"""
+    def __init__(self, model_name="monologg/koelectra-small-v3-discriminator", num_labels=5):
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.tokenizer = ElectraTokenizer.from_pretrained(model_name)
+        self.model = ElectraForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
+        self.model.to(self.device)
+        self.num_labels = num_labels
+
+    def train(self, train_texts, train_labels, epochs=3, batch_size=16, lr=2e-5):
+        """모델 학습 로직"""
+        dataset = IntentDataset(train_texts, train_labels, self.tokenizer)
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+        
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr)
+        
+        self.model.train()
+        for epoch in range(epochs):
+            total_loss = 0
+            for batch in dataloader:
+                optimizer.zero_grad()
+                
+                input_ids = batch['input_ids'].to(self.device)
+                attention_mask = batch['attention_mask'].to(self.device)
+                labels = batch['labels'].to(self.device)
+                
+                outputs = self.model(input_ids, attention_mask=attention_mask, labels=labels)
+                loss = outputs.loss
+                
+                loss.backward()
+                optimizer.step()
+                
+                total_loss += loss.item()
+            print(f"Epoch {epoch+1}/{epochs} - Loss: {total_loss/len(dataloader):.4f}")
+
+    def predict(self, text):
+        """질문 의도 확률값 반환 인퍼런스"""
+        self.model.eval()
+        encoding = self.tokenizer.encode_plus(
+            text,
+            add_special_tokens=True,
+            max_length=128,
+            return_token_type_ids=False,
+            padding='max_length',
+            truncation=True,
+            return_attention_mask=True,
+            return_tensors='pt',
+        )
+        
+        input_ids = encoding['input_ids'].to(self.device)
+        attention_mask = encoding['attention_mask'].to(self.device)
+        
+        with torch.no_grad():
+            outputs = self.model(input_ids, attention_mask=attention_mask)
+            logits = outputs.logits
+            probs = F.softmax(logits, dim=1)
+            
+            confidence, predicted_class = torch.max(probs, dim=1)
+            
+        class_idx = predicted_class.item()
+        
+        return {
+            "text": text,
+            "intent_id": class_idx,
+            "intent_label": INTENT_CLASSES[class_idx],
+            "confidence": confidence.item(),
+            "probabilities": {INTENT_CLASSES[i]: probs[0][i].item() for i in range(self.num_labels)}
+        }
+    
+    def save_model(self, path):
+        self.model.save_pretrained(path)
+        self.tokenizer.save_pretrained(path)
+        
+    def load_model(self, path):
+        self.tokenizer = ElectraTokenizer.from_pretrained(path)
+        self.model = ElectraForSequenceClassification.from_pretrained(path, num_labels=self.num_labels)
+        self.model.to(self.device)
