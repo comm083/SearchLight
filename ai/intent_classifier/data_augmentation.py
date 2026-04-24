@@ -1,10 +1,13 @@
-import openai
+from openai import OpenAI
 import pandas as pd
 import json
 import os
+from dotenv import load_dotenv
 
-# OpenAI API 키 설정 (환경변수나 직접 입력)
-openai.api_key = os.getenv("OPENAI_API_KEY", "your-api-key-here")
+# .env 파일에서 환경변수 로드
+load_dotenv()
+api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=api_key)
 
 # 5가지 분류 카테고리 정의
 INTENT_CATEGORIES = {
@@ -29,8 +32,8 @@ def generate_augmented_data(intent_id: int, num_samples: int = 10):
     """
 
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that generates training data in Korean."},
                 {"role": "user", "content": prompt}
@@ -76,10 +79,9 @@ def build_dataset():
     # 실제로는 manual_data 개수 파악 후 부족분만큼 생성
     for i in range(5):
         print(f"Generating augmented data for: {INTENT_CATEGORIES[i]}...")
-        # API 호출 비용 및 시간 절약을 위해 주석 처리하거나 수를 줄여 테스트 권장
-        # new_data = generate_augmented_data(intent_id=i, num_samples=42)
-        # augmented_data.extend(new_data)
-        pass # 실제 실행시 주석 해제
+        # API 호출 비용 및 시간 절약을 위해 처음에는 클래스당 20개씩 생성 (총 100개)
+        new_data = generate_augmented_data(intent_id=i, num_samples=40)
+        augmented_data.extend(new_data)
 
     # 데이터 결합
     total_dataset = manual_data + augmented_data

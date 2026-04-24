@@ -209,3 +209,17 @@ __marimo__/
 /SearchLight
 requirements.txt
 test.py
+
+# Custom ignores for SearchLight
+node_modules/
+frontend/node_modules/
+searchlight/
+.vscode/
+scratch/
+installed_packages.md
+requirements_temp.txt
+*.db
+*.log
+model/
+
+
