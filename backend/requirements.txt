@@ -1,1 +1,15 @@
-# FastAPI requirements
+# FastAPI & API Server
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+
+# AI & NLP
+transformers
+torch
+sentence-transformers
+faiss-cpu
+
+# Utilities
+pandas
+python-multipart
