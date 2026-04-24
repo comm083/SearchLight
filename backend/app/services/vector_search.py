@@ -1,4 +1,6 @@
 import faiss
+import json
+import os
 from sentence_transformers import SentenceTransformer
 
 class FaissSearchService:
@@ -6,14 +8,16 @@ class FaissSearchService:
         print("[Service] FAISS 검색 엔진 초기화 중...")
         self.model = SentenceTransformer('snunlp/KR-SBERT-V40K-klueNLI-augSTS')
         
-        # 더미 데이터베이스
-        self.db_descriptions = [
-            "빨간색 패딩을 입은 남자가 골목길을 급하게 뛰어감",
-            "검은색 세단이 신호를 위반하고 교차로를 지나감",
-            "파란색 모자를 쓴 사람이 자전거를 타고 횡단보도를 건넘",
-            "두 사람이 편의점 앞에서 대화를 나누고 있음",
-            "밤늦게 한 여성이 스마트폰을 보며 걸어가고 있음"
-        ]
+        # JSON 데이터 로드
+        json_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'ai', 'data', 'scene_descriptions.json'))
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.db_descriptions = [item["description"] for item in data]
+                print(f"[Service] -> {len(self.db_descriptions)}건의 장면 묘사 데이터를 로드했습니다.")
+        except FileNotFoundError:
+            print(f"[Service] 오류: {json_path} 파일을 찾을 수 없습니다.")
+            self.db_descriptions = ["데이터 로드 실패 - 기본 더미 텍스트"]
         
         # 인덱싱 준비
         db_embeddings = self.model.encode(self.db_descriptions).astype('float32')
