@@ -13,3 +13,4 @@ faiss-cpu
 # Utilities
 pandas
 python-multipart
+supabase

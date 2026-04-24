@@ -1,5 +1,7 @@
 import faiss
 import numpy as np
+import json
+import os
 from sentence_transformers import SentenceTransformer
 
 def run_faiss_search():
@@ -7,13 +9,15 @@ def run_faiss_search():
     model = SentenceTransformer('snunlp/KR-SBERT-V40K-klueNLI-augSTS')
 
     # 데이터베이스에 저장될 기존 CCTV 데이터(문장들)
-    db_descriptions = [
-        "빨간색 패딩을 입은 남자가 골목길을 급하게 뛰어감",
-        "검은색 세단이 신호를 위반하고 교차로를 지나감",
-        "파란색 모자를 쓴 사람이 자전거를 타고 횡단보도를 건넘",
-        "두 사람이 편의점 앞에서 대화를 나누고 있음",
-        "밤늦게 한 여성이 스마트폰을 보며 걸어가고 있음"
-    ]
+    json_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'scene_descriptions.json')
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            db_descriptions = [item["description"] for item in data]
+            print(f"-> {len(db_descriptions)}건의 장면 묘사 데이터를 로드했습니다.")
+    except FileNotFoundError:
+        print(f"오류: {json_path} 파일을 찾을 수 없습니다.")
+        return
 
     print("2. 기존 데이터베이스 문장들을 벡터로 변환 중...")
     # FAISS는 numpy의 float32 타입을 사용해야 합니다.

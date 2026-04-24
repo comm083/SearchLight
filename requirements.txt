@@ -1,0 +1,9 @@
+sentence-transformers
+faiss-cpu
+torch
+transformers
+fastapi
+uvicorn
+pandas
+openai
+python-multipart
