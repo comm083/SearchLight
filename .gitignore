@@ -206,5 +206,11 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+<<<<<<< HEAD
 #reference
 /reference/
+=======
+/SearchLight
+requirements.txt
+test.py
+>>>>>>> 461e1f268968a167a7ce3bb5b2ac3781e8c06580
