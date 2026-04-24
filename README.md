@@ -1,6 +1,7 @@
 # SearchLight Project
 
 This is the top-level project directory for SearchLight.
+.
 
 ---
 
@@ -32,11 +33,10 @@ git checkout -b feat/#1-login-ui
 
 📌 브랜치 이름 규칙
 
-* 형식: `타입/#이슈번호-작업내용`
-* 예시:
-
-  * feat/#1-login-ui
-  * fix/#2-login-error
+- 형식: `타입/#이슈번호-작업내용`
+- 예시:
+  - feat/#1-login-ui
+  - fix/#2-login-error
 
 ---
 
@@ -64,17 +64,17 @@ git push origin feat/#1-login-ui
 
 📌 PR 작성 시 포함 내용
 
-* 작업 내용 설명
-* 변경 이유
-* 확인 방법
+- 작업 내용 설명
+- 변경 이유
+- 확인 방법
 
 ---
 
 # 👀 5. 코드 리뷰 & 승인
 
-* 팀원들이 PR에서 코드 확인
-* 수정 요청 또는 승인(Approve)
-* 승인 후에만 merge 가능
+- 팀원들이 PR에서 코드 확인
+- 수정 요청 또는 승인(Approve)
+- 승인 후에만 merge 가능
 
 ---
 
@@ -108,20 +108,20 @@ git push origin 브랜치이름
 
 # 🚨 주의사항
 
-* main 브랜치 직접 수정 ❌
-* 반드시 브랜치 생성 후 작업
-* PR 없이 merge 금지
-* 커밋 메시지는 명확하게 작성
+- main 브랜치 직접 수정 ❌
+- 반드시 브랜치 생성 후 작업
+- PR 없이 merge 금지
+- 커밋 메시지는 명확하게 작성
 
 ---
 
 # 💡 추천 커밋 메시지 규칙
 
-* feat: 기능 추가
-* fix: 버그 수정
-* design: UI 작업
-* refactor: 코드 개선
-* docs: 문서 수정
+- feat: 기능 추가
+- fix: 버그 수정
+- design: UI 작업
+- refactor: 코드 개선
+- docs: 문서 수정
 
 ---
 
