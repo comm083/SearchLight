@@ -69,6 +69,10 @@ class IntentDataset(Dataset):
 # 3. 학습 함수
 # ────────────────────────────────────────────
 def train():
+    # 학습 로그 저장을 위한 리스트
+    history = []
+    log_path = os.path.join(os.path.dirname(__file__), "training_log.csv")
+
     # 데이터 로드
     print(f"[Train] 데이터 로드 중: {DATA_PATH}")
     df = pd.read_csv(DATA_PATH, encoding="utf-8-sig")
@@ -144,6 +148,19 @@ def train():
             model.save_pretrained(SAVE_DIR)
             tokenizer.save_pretrained(SAVE_DIR)
             print(f"  -> 모델 저장 완료! (현재 최고 정확도: {best_accuracy*100:.1f}%)")
+
+        # 로그 기록 추가
+        history.append({
+            "epoch": epoch + 1,
+            "loss": avg_loss,
+            "accuracy": accuracy
+        })
+
+    # 학습 로그 CSV 저장
+    df_log = pd.DataFrame(history)
+    df_log.to_csv(log_path, index=False)
+    print(f"\n[Train] 학습 로그가 저장되었습니다: {log_path}")
+
 
     # 최종 성능 리포트
     print("\n" + "="*50)

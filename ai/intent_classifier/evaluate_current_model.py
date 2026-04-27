@@ -51,14 +51,16 @@ def evaluate_current_model():
     accuracy = (correct_count / total_count) * 100
     
     print("-" * 80)
-    print("📊 [성능 평가 결과 (수치화)]")
+    print("[성능 평가 결과 (수치화)]")
     print(f"총 테스트 개수 : {total_count}개")
     print(f"정답 개수      : {correct_count}개")
     print(f"오답 개수      : {total_count - correct_count}개")
-    print(f"👉 현재 모델 정확도(Accuracy): {accuracy:.1f}%")
+    print(f"현재 모델 정확도(Accuracy): {accuracy:.1f}%")
     
     if accuracy < 50:
-        print("\n💡 결론: 현재 모델은 CCTV 도메인에 맞지 않아 정확도가 매우 낮습니다. 파인튜닝(학습)이 필수적입니다!")
+        print("\n결론: 현재 모델의 정확도가 낮습니다. 추가 학습이 필요할 수 있습니다.")
+    else:
+        print("\n결론: 모델 성능이 향상되었습니다!")
 
 if __name__ == "__main__":
     evaluate_current_model()
