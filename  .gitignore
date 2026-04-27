@@ -16,7 +16,6 @@ searchlight/
 
 # AI Models & Large Files
 ai/model/
-model/
 *.h5
 *.pth
 *.pt

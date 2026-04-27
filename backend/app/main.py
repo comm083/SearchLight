@@ -27,9 +27,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from typing import Optional
+
 class SearchRequest(BaseModel):
     query: str
     top_k: int = 2
+    start_time: Optional[str] = None # 예: "2026-04-24T00:00:00"
+    end_time: Optional[str] = None
 
 # 5가지 의도별 맞춤 응답 메시지
 INTENT_MESSAGES = {

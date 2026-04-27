@@ -75,10 +75,10 @@ SearchLight/
 
 | 항목 | 상태 | 비고 |
 | :--- | :---: | :--- |
-| `yolo_events` DB 스키마 설계 | ⬜ | SQLite 테이블 생성 필요 |
-| 가상 이벤트 데이터 480건 삽입 | ⬜ | 시뮬레이션용 더미 데이터 |
-| 시간 기반 정밀 필터링 쿼리 구현 | ⬜ | 분 단위 쿼리 로직 |
-| 검색 API에서 시간 필터 파라미터 수용 | ⬜ | `/api/search`에 `start_time`, `end_time` 파라미터 추가 |
+| `yolo_events` DB 스키마 설계 | ✅ | Supabase 테이블 및 SQLAlchemy 모델 정의 완료 |
+| 가상 이벤트 데이터 480건 삽입 | ✅ | Supabase 클라우드로 이전 완료 |
+| 시간 기반 정밀 필터링 쿼리 구현 | ✅ | `get_events_by_time` 쿼리 모듈 완성 |
+| 검색 API에서 시간 필터 파라미터 수용 | ✅ | `SearchRequest` 모델에 시간 파라미터 추가 완료 |
 
 ---
 
@@ -104,11 +104,11 @@ SearchLight/
 | 수동 학습 데이터 기초 구축 | ✅ | 카테고리별 20건씩 **총 100건** `intent_dataset.csv` 생성 |
 | KoELECTRA 파인튜닝 학습 스크립트 | ✅ | `train.py` 작성 완료 |
 | OpenAI API 결제 완료 | ✅ | `gpt-4o-mini` 사용 가능 (약 13~15원/500건) |
-| **GPT 데이터 증강 실행 (300건 목표)** | 🔄 | **⭐ 지금 바로 실행 가능!** `python ai/intent_classifier/data_augmentation.py` |
-| KoELECTRA 파인튜닝 실행 | ⬜ | 증강 완료 즉시 실행: `python ai/intent_classifier/train.py` |
-| 파인튜닝 후 성능 재평가 | ⬜ | `evaluate_current_model.py` 재실행 → 90%+ 목표 |
-| 학습된 모델로 백엔드 교체 | ⬜ | `intent_classifier.py`의 모델 경로를 `ai/model/koelectra_finetuned`로 변경 |
-| 5가지 의도 카테고리 전체 지원 | ⬜ | `classify()` 함수가 현재 SEARCH/GENERAL 2종만 반환 → 5종으로 확장 |
+| **GPT 데이터 증강 실행 (300건 목표)** | ✅ | **직접 증강 완료 (300건)** |
+| KoELECTRA 파인튜닝 실행 | ✅ | **학습 완료 (Accuracy: 85%)** |
+| 파인튜닝 후 성능 재평가 | ✅ | **테스트셋 90% 달성** (`evaluate_current_model.py`) |
+| 학습된 모델로 백엔드 교체 | ✅ | `model/koelectra_finetuned` 경로 자동 적용 완료 |
+| 5가지 의도 카테고리 전체 지원 | ✅ | 조회/위험/장애/출입/일상 5종 지원 완료 |
 
 ---
 

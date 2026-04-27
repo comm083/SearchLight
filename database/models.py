@@ -10,7 +10,7 @@ class YoloEvent(Base):
     label = Column(String, index=True)  # person, car, etc.
     confidence = Column(Float)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow, index=True)
-    description = Column(String)  # 상세 묘사 (RAG 연동용)
+    description = Column(String) # 상세 묘사 (RAG 연동용)
 
 class SearchLog(Base):
     __tablename__ = "search_logs"
