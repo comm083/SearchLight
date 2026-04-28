@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(python -c \"import json; data=json.load\\(open\\('c:/SearchLight/ai/data/mp4_JsonData.json','r',encoding='utf-8'\\)\\); print\\(f'기존 처리된 영상 수: {len\\(data\\)}'\\); [print\\(f'  - {item[\\\\\"video_filename\\\\\"]}'\\) for item in data]\")",
-      "Bash(python backend/makeData/makeJsonData.py)"
+      "Bash(python backend/makeData/makeJsonData.py)",
+      "Bash(pip show *)",
+      "Bash(c:\\\\SearchLight\\\\SearchLight\\\\Scripts\\\\pip.exe install *)",
+      "PowerShell(& \"c:\\\\SearchLight\\\\SearchLight\\\\Scripts\\\\pip.exe\" install supabase easyocr 2>&1)",
+      "Bash(c:/SearchLight/SearchLight/Scripts/python.exe -c ' *)",
+      "Bash(python -c ' *)"
     ]
   }
 }
