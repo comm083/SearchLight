@@ -27,11 +27,10 @@ class IntentDataset(Dataset):
         text = str(self.texts[item])
         label = self.labels[item]
 
-        encoding = self.tokenizer.encode_plus(
+        encoding = self.tokenizer(
             text,
             add_special_tokens=True,
             max_length=self.max_len,
-            return_token_type_ids=False,
             padding='max_length',
             truncation=True,
             return_attention_mask=True,
@@ -83,11 +82,10 @@ class IntentClassifier:
     def predict(self, text):
         """질문 의도 확률값 반환 인퍼런스"""
         self.model.eval()
-        encoding = self.tokenizer.encode_plus(
+        encoding = self.tokenizer(
             text,
             add_special_tokens=True,
             max_length=128,
-            return_token_type_ids=False,
             padding='max_length',
             truncation=True,
             return_attention_mask=True,
@@ -120,5 +118,5 @@ class IntentClassifier:
         
     def load_model(self, path):
         self.tokenizer = ElectraTokenizer.from_pretrained(path)
-        self.model = ElectraForSequenceClassification.from_pretrained(path, num_labels=self.num_labels)
+        self.model = ElectraForSequenceClassification.from_pretrained(path, num_labels=self.num_labels, use_safetensors=True)
         self.model.to(self.device)
