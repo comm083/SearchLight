@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Search, ShieldAlert, Camera, History, UserCheck, AlertTriangle, MessageSquare, Loader2, Sparkles } from 'lucide-react';
+import { Search, ShieldAlert, Camera, History, UserCheck, AlertTriangle, MessageSquare, Loader2, Sparkles, Mic, Volume2, Square } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const INTENT_ICONS = {
@@ -8,7 +8,8 @@ const INTENT_ICONS = {
   EMERGENCY: { icon: ShieldAlert, color: "text-red-400", bg: "bg-red-400/10", label: "위험" },
   ERROR: { icon: AlertTriangle, color: "text-yellow-400", bg: "bg-yellow-400/10", label: "장애" },
   ACCESS: { icon: UserCheck, color: "text-green-400", bg: "bg-green-400/10", label: "출입" },
-  GENERAL: { icon: MessageSquare, color: "text-purple-400", bg: "bg-purple-400/10", label: "일상" }
+  GENERAL: { icon: MessageSquare, color: "text-purple-400", bg: "bg-purple-400/10", label: "일상" },
+  CHITCHAT: { icon: MessageSquare, color: "text-pink-400", bg: "bg-pink-400/10", label: "잡담" }
 };
 
 function App() {
@@ -16,16 +17,74 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const recognitionRef = useRef(null);
 
-  const handleSearch = async (e) => {
+  // 음성 인식 설정 (Web Speech API)
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'ko-KR';
+      recognition.interimResults = false;
+      recognition.continuous = false;
+
+      recognition.onstart = () => setIsListening(true);
+      recognition.onend = () => setIsListening(false);
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setQuery(transcript);
+        executeSearch(transcript);
+      };
+      recognitionRef.current = recognition;
+    }
+  }, []);
+
+  const startListening = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+    } else {
+      // 말하기 중단
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      recognitionRef.current?.start();
+    }
+  };
+
+  // 음성 출력 (TTS)
+  const speak = (text) => {
+    if (!window.speechSynthesis || !text) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'ko-KR';
+    utterance.rate = 1.0;
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleSearch = (e) => {
     if (e) e.preventDefault();
-    if (!query.trim()) return;
+    executeSearch(query);
+  };
+
+  const executeSearch = async (searchQuery) => {
+    if (!searchQuery.trim()) return;
 
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.post('/api/search', { query });
-      setResult(response.data);
+      const response = await axios.post('http://localhost:8000/api/search', { query: searchQuery });
+      const data = response.data;
+      setResult(data);
+      
+      // 결과 수신 시 자동으로 AI 보고서 또는 답변 읽어주기
+      if (data.ai_report) {
+        speak(data.ai_report);
+      } else if (data.answer) {
+        speak(data.answer);
+      }
     } catch (err) {
       console.error(err);
       setError("서버와의 통신 중 오류가 발생했습니다.");
@@ -74,17 +133,49 @@ function App() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="무엇을 찾아드릴까요? (예: 빨간 옷 입은 사람 찾아줘)"
-              className="w-full bg-[#161618] border border-white/5 rounded-3xl px-8 py-6 text-xl outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-600 pr-32 shadow-2xl"
+              className="w-full bg-[#161618] border border-white/5 rounded-3xl px-8 py-6 text-xl outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-600 pr-48 shadow-2xl"
             />
-            <button 
-              type="submit"
-              disabled={loading}
-              className="absolute right-3 top-3 bottom-3 px-8 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 rounded-2xl flex items-center gap-2 font-bold transition-all"
-            >
-              {loading ? <Loader2 className="animate-spin" /> : <Search size={20} />}
-              <span>검색</span>
-            </button>
+            <div className="absolute right-3 top-3 bottom-3 flex gap-2">
+              <button
+                type="button"
+                onClick={startListening}
+                className={`w-14 rounded-2xl flex items-center justify-center transition-all ${
+                  isListening ? 'bg-red-500 mic-pulse' : 'bg-white/5 hover:bg-white/10 text-slate-400'
+                }`}
+              >
+                {isListening ? <Square size={20} fill="currentColor" /> : <Mic size={20} />}
+              </button>
+              <button 
+                type="submit"
+                disabled={loading}
+                className="px-8 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 rounded-2xl flex items-center gap-2 font-bold transition-all"
+              >
+                {loading ? <Loader2 className="animate-spin" /> : <Search size={20} />}
+                <span>검색</span>
+              </button>
+            </div>
           </form>
+
+          {/* Voice Feedback Overlay */}
+          <AnimatePresence>
+            {(isListening || isSpeaking) && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="absolute -bottom-16 left-1/2 -translate-x-1/2 flex items-center gap-4 px-6 py-3 glass-card rounded-2xl border-blue-500/30"
+              >
+                <div className="flex items-center gap-1 h-6">
+                  {[...Array(8)].map((_, i) => (
+                    <div key={i} className="waveform-bar" style={{ animationDelay: `${i * 0.1}s` }} />
+                  ))}
+                </div>
+                <span className="text-sm font-bold text-blue-400">
+                  {isListening ? "말씀해 주세요..." : "AI가 설명하는 중입니다..."}
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
 
         {/* Content Area */}
@@ -97,11 +188,14 @@ function App() {
               exit={{ opacity: 0 }}
               className="flex flex-col items-center justify-center py-24 gap-4"
             >
-              <div className="relative">
-                <Loader2 size={48} className="text-blue-500 animate-spin" />
-                <div className="absolute inset-0 bg-blue-500 blur-2xl opacity-20 animate-pulse" />
+              <div className="relative ai-glow">
+                <div className="p-8 bg-blue-600/20 rounded-full">
+                  <Loader2 size={48} className="text-blue-500 animate-spin" />
+                </div>
+                <div className="absolute inset-0 bg-blue-500 blur-3xl opacity-20 animate-pulse" />
               </div>
-              <p className="text-slate-400 font-medium animate-pulse">AI가 영상을 분석하고 의도를 파악하고 있습니다...</p>
+              <p className="text-slate-200 font-bold text-lg animate-pulse">AI가 실시간 CCTV 데이터를 분석하고 있습니다...</p>
+              <p className="text-slate-500 text-sm">잠시만 기다려 주세요.</p>
             </motion.div>
           ) : result ? (
             <motion.div 
@@ -110,26 +204,52 @@ function App() {
               animate={{ opacity: 1, y: 0 }}
               className="space-y-8"
             >
-              {/* Intent Section */}
-              <div className="flex items-center gap-4 p-6 glass-card rounded-3xl">
-                {result.intent_info && (
-                  <>
-                    <div className={`p-4 rounded-2xl ${INTENT_ICONS[result.intent_info.intent]?.bg || 'bg-slate-400/10'}`}>
-                      {(() => {
-                        const Icon = INTENT_ICONS[result.intent_info.intent]?.icon || MessageSquare;
-                        return <Icon className={INTENT_ICONS[result.intent_info.intent]?.color || 'text-slate-400'} size={28} />;
-                      })()}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Detected Intent</span>
-                        <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded-full text-slate-400">Confidence {Math.round(result.intent_info.confidence * 100)}%</span>
+              {/* Intent & AI Report Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1 flex items-center gap-4 p-6 glass-card rounded-3xl">
+                  {result.intent_info && (
+                    <>
+                      <div className={`p-4 rounded-2xl ${INTENT_ICONS[result.intent_info.intent]?.bg || 'bg-slate-400/10'}`}>
+                        {(() => {
+                          const Icon = INTENT_ICONS[result.intent_info.intent]?.icon || MessageSquare;
+                          return <Icon className={INTENT_ICONS[result.intent_info.intent]?.color || 'text-slate-400'} size={28} />;
+                        })()}
                       </div>
-                      <h2 className="text-2xl font-bold">
-                        의도: <span className={INTENT_ICONS[result.intent_info.intent]?.color}>{INTENT_ICONS[result.intent_info.intent]?.label || result.intent_info.intent}</span>
-                      </h2>
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Detected Intent</span>
+                          <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded-full text-slate-400">Confidence {Math.round(result.intent_info.confidence * 100)}%</span>
+                        </div>
+                        <h2 className="text-2xl font-bold">
+                          <span className={INTENT_ICONS[result.intent_info.intent]?.color}>{INTENT_ICONS[result.intent_info.intent]?.label || result.intent_info.intent}</span>
+                        </h2>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* AI Report Card */}
+                {(result.ai_report || result.answer) && (
+                  <div className="lg:col-span-2 p-6 glass-card rounded-3xl border-blue-500/20 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                      <Volume2 size={80} className="text-blue-500" />
                     </div>
-                  </>
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                      <span className="text-xs font-bold text-blue-500 uppercase tracking-widest">AI Security Report</span>
+                    </div>
+                    <div className="text-lg text-slate-200 leading-relaxed font-medium">
+                      {result.ai_report || result.answer}
+                    </div>
+                    {isSpeaking && (
+                      <div className="mt-4 flex items-center gap-2">
+                        <div className="waveform-bar" style={{ animationDelay: '0s' }} />
+                        <div className="waveform-bar" style={{ animationDelay: '0.2s' }} />
+                        <div className="waveform-bar" style={{ animationDelay: '0.4s' }} />
+                        <span className="text-xs text-blue-400 font-bold">음성 안내 중...</span>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
