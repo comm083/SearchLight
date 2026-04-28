@@ -1,0 +1,326 @@
+[
+  {
+    "summary": "이 영상은 상점 내부를 보여주며 인원 출입 및 행동의 변화를 관찰합니다. 몇 명의 인원이 상점에 들어와 물건을 집거나 놓고 있습니다.",
+    "frames": [
+      {
+        "timestamp": "05:12:00",
+        "timestamp_sec": 0.0,
+        "person": 1,
+        "notes": "한 사람이 계산대에 앉아서 휴대폰을 보고 있다."
+      },
+      {
+        "timestamp": "05:12:05",
+        "timestamp_sec": 5.0,
+        "person": 2,
+        "notes": "새로운 사람이 상점 안으로 들어왔다."
+      },
+      {
+        "timestamp": "05:12:10",
+        "timestamp_sec": 10.0,
+        "person": 2,
+        "notes": "방문한 고객이 진열대를 살펴보고 있다."
+      },
+      {
+        "timestamp": "05:12:15",
+        "timestamp_sec": 15.0,
+        "person": 2,
+        "notes": "진열대 앞에 가방을 내려놓고 물건을 고르고 있다."
+      },
+      {
+        "timestamp": "05:12:20",
+        "timestamp_sec": 20.0,
+        "person": 1,
+        "notes": "고객이 사라지고 가방만 남았다."
+      },
+      {
+        "timestamp": "05:12:25",
+        "timestamp_sec": 25.0,
+        "person": 2,
+        "notes": "다른 사람이 들어와서 가방을 들어 나간다."
+      },
+      {
+        "timestamp": "05:12:30",
+        "timestamp_sec": 30.0,
+        "person": 1,
+        "notes": "상점에 아무도 없고, 가방이 남아있다."
+      }
+    ],
+    "video_filename": "C_3_11_17_BU_SYB_09-28_14-06-12_CC_RGB_DF2_M2_F2.mp4",
+    "event_date": "2026-04-28 09:02:48"
+  },
+  {
+    "summary": "가게 안에 직원과 손님이 있다. 손님이 가게를 돌아다니며 물품을 살펴보고 있다.",
+    "frames": [
+      {
+        "timestamp": "00:00:00",
+        "timestamp_sec": 0.0,
+        "person": 1,
+        "notes": "직원이 계산대에 앉아 있다."
+      },
+      {
+        "timestamp": "00:00:01",
+        "timestamp_sec": 1.0,
+        "person": 2,
+        "notes": "손님이 가게 안으로 걸어 들어온다."
+      },
+      {
+        "timestamp": "00:00:02",
+        "timestamp_sec": 2.0,
+        "person": 2,
+        "notes": "손님이 물품을 둘러본다."
+      },
+      {
+        "timestamp": "00:00:03",
+        "timestamp_sec": 3.0,
+        "person": 2,
+        "notes": "손님이 물품을 자세히 보고 있다."
+      },
+      {
+        "timestamp": "00:00:04",
+        "timestamp_sec": 4.0,
+        "person": 2,
+        "notes": "손님이 다른 물품을 확인하고 있다."
+      },
+      {
+        "timestamp": "00:00:05",
+        "timestamp_sec": 5.0,
+        "person": 2,
+        "notes": "손님이 물건을 집어 들고 있다."
+      },
+      {
+        "timestamp": "00:00:06",
+        "timestamp_sec": 6.0,
+        "person": 2,
+        "notes": "손님이 다시 다른 물품으로 이동하고 있다."
+      },
+      {
+        "timestamp": "00:00:07",
+        "timestamp_sec": 7.0,
+        "person": 2,
+        "notes": "손님이 추가 물품을 확인하고 있다."
+      },
+      {
+        "timestamp": "00:00:08",
+        "timestamp_sec": 8.0,
+        "person": 2,
+        "notes": "손님이 가게에서 나가고 있다."
+      }
+    ],
+    "video_filename": "C_3_12_25_BU_SYA_10-06_14-46-19_CD_RGB_DF2_F3.mp4",
+    "event_date": "2026-04-24 10:15:01"
+  },
+  {
+    "summary": "해당 영상은 가게 내부의 보안 카메라 영상입니다. 영상은 손님들이 방문하여 물건을 둘러보고 서로 싸우는 상황을 보여줍니다. 직원은 계속해서 책상에 앉아 있고, 다른 손님들이 들어와 물건을 고르고 상호작용하며, 마지막에는 신체적 충돌이 발생합니다.",
+    "frames": [
+      {
+        "timestamp": "00:00:00",
+        "timestamp_sec": 0.0,
+        "person": 1,
+        "notes": "직원 한 명이 책상에 앉아 있으며 다른 사람은 없음."
+      },
+      {
+        "timestamp": "00:00:02",
+        "timestamp_sec": 2.0,
+        "person": 2,
+        "notes": "손님 한 명이 가게로 들어와 선반을 둘러봄."
+      },
+      {
+        "timestamp": "00:00:04",
+        "timestamp_sec": 4.0,
+        "person": 3,
+        "notes": "또 다른 손님이 입장하고 물건을 둘러봄."
+      },
+      {
+        "timestamp": "00:00:06",
+        "timestamp_sec": 6.0,
+        "person": 3,
+        "notes": "두 손님이 서로 상호작용하며 대화하거나 물건을 고름."
+      },
+      {
+        "timestamp": "00:00:08",
+        "timestamp_sec": 8.0,
+        "person": 2,
+        "notes": "한 손님이 다른 손님에게 취한 행동에 대해 짜증을 내거나 도발함."
+      },
+      {
+        "timestamp": "00:00:10",
+        "timestamp_sec": 10.0,
+        "person": 3,
+        "notes": "신체적 충돌이 발생, 손님들 사이에 싸움이 벌어짐."
+      },
+      {
+        "timestamp": "00:00:12",
+        "timestamp_sec": 12.0,
+        "person": 3,
+        "notes": "직원은 여전히 책상에서 움직이지 않으며, 다른 두 명은 싸움을 지속함."
+      },
+      {
+        "timestamp": "00:00:14",
+        "timestamp_sec": 14.0,
+        "person": 1,
+        "notes": "손님들이 모두 떠나고 직원만 남아 있음."
+      },
+      {
+        "timestamp": "00:00:16",
+        "timestamp_sec": 16.0,
+        "person": 1,
+        "notes": "직원은 책상에 앉아 있는 상태로 돌아감."
+      }
+    ],
+    "video_filename": "C_3_13_23_BU_SYA_10-06_14-56-55_CD_RGB_DF2_F3.mp4",
+    "event_date": "2026-04-26 02:13:02"
+  },
+  {
+    "summary": "가게에서 누군가 바닥에 드러누운 사건 발생. 아이가 여러 번 위치를 바꾸다 갑자기 바닥에 드러눕는 상황.",
+    "frames": [
+      {
+        "timestamp": "05:12:00",
+        "timestamp_sec": 0.0,
+        "person": 1,
+        "notes": "가게 안에 사람이 없음. 직원으로 보이는 인물은 계산대 근처에 있음."
+      },
+      {
+        "timestamp": "05:12:02",
+        "timestamp_sec": 2.0,
+        "person": 2,
+        "notes": "아이 한 명이 나타나 상품을 바라보고 있음."
+      },
+      {
+        "timestamp": "05:12:04",
+        "timestamp_sec": 4.0,
+        "person": 2,
+        "notes": "아이의 위치가 조금 이동하였고, 여전히 상품을 바라보고 있음."
+      },
+      {
+        "timestamp": "05:12:06",
+        "timestamp_sec": 6.0,
+        "person": 2,
+        "notes": "아이의 위치가 또다시 약간 이동. 행동에 특별한 이상은 보이지 않음."
+      },
+      {
+        "timestamp": "05:12:08",
+        "timestamp_sec": 8.0,
+        "person": 2,
+        "notes": "아이가 뒤돌아서서 다른 방향을 바라보고 있음."
+      },
+      {
+        "timestamp": "05:12:10",
+        "timestamp_sec": 10.0,
+        "person": 2,
+        "notes": "아이가 다시 이동하여 상품을 바라보고, 약간의 관심을 보이고 있음."
+      },
+      {
+        "timestamp": "05:12:12",
+        "timestamp_sec": 12.0,
+        "person": 2,
+        "notes": "아이가 바닥에 드러눕는 이상 행동을 보임."
+      }
+    ],
+    "video_filename": "C_3_7_1_BU_DYA_07-31_15-15-25_CA_RGB_DF2_M1.mp4",
+    "event_date": "2026-04-26 05:11:18"
+  },
+  {
+    "summary": "한 사람이 상점에서 물건을 우산으로 내리치며 물건을 떨어뜨리는 모습. 상황이 문제가 될 수 있음.",
+    "frames": [
+      {
+        "timestamp": "13:45:10",
+        "timestamp_sec": 0.0,
+        "person": 0,
+        "notes": "빈 가게 모습, 상품은 정돈되어 있음."
+      },
+      {
+        "timestamp": "13:45:12",
+        "timestamp_sec": 2.0,
+        "person": 1,
+        "notes": "한 사람이 입장함. 우산을 들고 있음."
+      },
+      {
+        "timestamp": "13:45:15",
+        "timestamp_sec": 5.0,
+        "person": 1,
+        "notes": "상품들을 바라보며 탐색 중임."
+      },
+      {
+        "timestamp": "13:45:18",
+        "timestamp_sec": 8.0,
+        "person": 1,
+        "notes": "우산으로 상품을 지적하며 가까이 다가섬."
+      },
+      {
+        "timestamp": "13:45:22",
+        "timestamp_sec": 12.0,
+        "person": 1,
+        "notes": "우산으로 선반 위의 상품을 내리쳐서 물건이 떨어짐."
+      },
+      {
+        "timestamp": "13:45:26",
+        "timestamp_sec": 16.0,
+        "person": 1,
+        "notes": "추가적으로 선반의 여러 상품을 우산으로 건드림. 몇몇 물건이 더 떨어짐."
+      },
+      {
+        "timestamp": "13:45:30",
+        "timestamp_sec": 20.0,
+        "person": 1,
+        "notes": "우산으로 상품을 밀고 다니다 최종적으로 가게를 빠져나감."
+      }
+    ],
+    "video_filename": "C_3_8_3_BU_SMB_08-28_15-57-40_CA_RGB_DF2_M1.mp4",
+    "event_date": "2026-04-27 21:25:35"
+  },
+  {
+    "summary": "영상에서는 한 사람이 매장 바닥에 은박지를 깔고 그 위에 종이를 태우는 장면이 보여집니다. 이는 매우 위험한 행동이며, 즉각적인 조치가 필요합니다.",
+    "frames": [
+      {
+        "timestamp": "05:12:00",
+        "timestamp_sec": 0.0,
+        "person": 1,
+        "notes": "매장에는 계산대에 있는 직원 한 명이 보입니다."
+      },
+      {
+        "timestamp": "05:12:02",
+        "timestamp_sec": 2.0,
+        "person": 2,
+        "notes": "한 사람이 매장 바닥에 접근하여 상자를 확인하는 듯합니다."
+      },
+      {
+        "timestamp": "05:12:04",
+        "timestamp_sec": 4.0,
+        "person": 2,
+        "notes": "해당 사람이 손에 종이를 쥐고 있는 모습이 보입니다."
+      },
+      {
+        "timestamp": "05:12:06",
+        "timestamp_sec": 6.0,
+        "person": 2,
+        "notes": "그 사람이 은박지 위에 종이를 두고 불을 붙이기 시작합니다."
+      },
+      {
+        "timestamp": "05:12:08",
+        "timestamp_sec": 8.0,
+        "person": 2,
+        "notes": "불이 붙은 종이가 은박지 위에 타고 있습니다."
+      },
+      {
+        "timestamp": "05:12:10",
+        "timestamp_sec": 10.0,
+        "person": 2,
+        "notes": "그 사람이 불타는 종이 근처를 떠나 매장 내 다른 상품을 살펴봅니다."
+      },
+      {
+        "timestamp": "05:12:12",
+        "timestamp_sec": 12.0,
+        "person": 2,
+        "notes": "여전히 불이 타고 있으며, 그 사람은 매장을 벗어날 준비를 하고 있습니다."
+      },
+      {
+        "timestamp": "05:12:14",
+        "timestamp_sec": 14.0,
+        "person": 2,
+        "notes": "불은 계속 타고 있고, 그 사람은 매장을 돌아다니고 있습니다."
+      }
+    ],
+    "video_filename": "C_3_9_8_BU_DYA_08-02_14-21-02_CA_RGB_DF2_F2.mp4",
+    "event_date": "2026-04-25 11:52:40"
+  }
+]

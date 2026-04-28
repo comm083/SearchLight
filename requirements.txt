@@ -7,3 +7,4 @@ uvicorn
 pandas
 openai
 python-multipart
+sentencepiece
