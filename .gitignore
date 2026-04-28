@@ -38,3 +38,6 @@ scratch/
 *.log
 installed_packages.md
 requirements_temp.txt
+
+backend\static\sampleData
+samplevideo.mp4

@@ -13,3 +13,5 @@ kiwipiepy_model==0.23.0
 numpy==2.4.4
 tqdm==4.67.3
 sentencepiece
+supabase
+easyocr
