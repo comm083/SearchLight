@@ -300,3 +300,77 @@ body {
   font-size: 12px;
   font-weight: bold;
 }
+
+/* Input Area */
+.input-container {
+  padding: 40px;
+  display: flex;
+  justify-content: center;
+}
+
+.input-wrapper {
+  width: 100%;
+  max-width: 800px;
+  background-color: #1f2937;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  padding: 8px 15px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.input-wrapper input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: white;
+  padding: 12px;
+  outline: none;
+  font-size: 15px;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.icon-btn:hover {
+  background-color: #374151;
+  color: white;
+}
+
+.send-btn {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.send-btn:hover {
+  background-color: #2563eb;
+}
+
+/* Profiles */
+.user-profile {
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  background-color: #8b5cf6;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+}

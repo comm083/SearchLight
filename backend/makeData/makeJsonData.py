@@ -4,6 +4,8 @@ import re
 import os
 import sys
 import tempfile
+import random
+from datetime import datetime, timedelta
 from openai import OpenAI
 import cv2
 from dotenv import load_dotenv
@@ -17,6 +19,24 @@ SUPABASE_URL   = os.getenv("SUPABASE_URL")
 # service_role 키 우선 사용 (RLS 우회) → 없으면 anon 키로 폴백
 SUPABASE_KEY   = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
 STORAGE_BUCKET = "cctv-clips"
+
+# 랜덤 타임스탬프 생성 시 날짜 중복 방지용 추적 집합
+_used_random_dates: set = set()
+
+def _generate_random_timestamp() -> str:
+    """OCR 실패 시 현재 기준 1주일 이내 랜덤 타임스탬프 생성 (날짜 중복 없음)."""
+    now = datetime.now()
+    available = [now.date() - timedelta(days=d) for d in range(7) if (now.date() - timedelta(days=d)) not in _used_random_dates]
+    if not available:
+        # 7일치 모두 소진 시 중복 허용
+        date = now.date() - timedelta(days=random.randint(0, 6))
+    else:
+        date = random.choice(available)
+    _used_random_dates.add(date)
+    h  = random.randint(0, 23)
+    m  = random.randint(0, 59)
+    s  = random.randint(0, 59)
+    return f"{date} {h:02d}:{m:02d}:{s:02d}"
 
 
 # ─────────────────────────────────────────────
@@ -303,16 +323,48 @@ def encode_video_and_extract_clips(video_path: str):
 # ─────────────────────────────────────────────
 ANALYSIS_PROMPT = """
 당신은 프로 경비원입니다. 동영상의 프레임이 순서대로 주어집니다. 각 프레임 간의 차이점을 알려주고, 문제가 발생하는지 분석해야합니다.
-경비원의 입장에서 상황을 설명하고 프레임 간 변화 요약, 의도 요약, timestamp에 영상이 찍힌 시간, 사람(person)들, 사람들의 복장, 상황 설명을 JSON으로 출력하세요.
-note 설명은 한국어로 작성해주세요. 사람마다 고유한 번호를 부여하고, 옷을 입은 사람들의 복장을 정확하게 묘사하세요.
+경비원의 입장에서 상황을 설명하고, 등장 인물 수·복장·행동, 발생 시각, 이상 상황 등을 포함하여 한국어로 상세한 요약을 작성하세요.
 출력 예:
 {
-  "summary": "...",
-  "frames": [
-    {"timestamp": "05:12:03", "timestamp_sec": 0.0, "person": 0, "notes": "..."}
-  ]
+  "summary": "..."
 }
 """
+
+def generate_intent_sentences(client: OpenAI, summary: str) -> dict:
+    """GPT로 요약을 5가지 의도별 설명 문장으로 분리 생성합니다."""
+    prompt = f"""다음은 CCTV 영상 분석 요약입니다:
+
+[요약]: {summary}
+
+위 내용을 바탕으로 아래 5가지 의도 유형별 설명 문장을 각각 한 문장씩 한국어로 작성해주세요.
+- time_sent: 이 영상에서 사건이 발생한 시간/시각 중심 설명
+- count_sent: 이 영상에 등장한 인원 수나 사물 개수 중심 설명
+- action_sent: 이 영상에서 감지된 주요 행동/동작 중심 설명
+- info_sent: 이 영상의 전체 상황을 간략하게 요약한 설명
+- error_sent: 이 영상에서 카메라나 시스템 이상 여부 설명
+
+JSON으로만 출력하세요 (설명 없이):
+{{"time_sent": "...", "count_sent": "...", "action_sent": "...", "info_sent": "...", "error_sent": "..."}}"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=400,
+        )
+        raw = response.choices[0].message.content.strip()
+        if raw.startswith("```json"):
+            raw = raw[7:].rsplit("```", 1)[0].strip()
+        elif raw.startswith("```"):
+            raw = raw[3:].rsplit("```", 1)[0].strip()
+        return json.loads(raw)
+    except Exception as e:
+        print(f"  [의도 문장 생성 실패] {e}")
+        return {
+            "time_sent": "", "count_sent": "", "action_sent": "",
+            "info_sent": summary[:200], "error_sent": ""
+        }
+
 
 def analyze_frames(image_list: list) -> dict:
     if not api_key:
@@ -382,11 +434,22 @@ CREATE TABLE IF NOT EXISTS cctv_videos (
     video_filename  TEXT        NOT NULL UNIQUE,
     event_date      TIMESTAMPTZ,                      -- OCR로 읽은 영상 시작 시각
     summary         TEXT,                             -- GPT 생성 요약
-    frames          JSONB,                            -- 프레임별 분석 데이터
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. 사람 감지 클립 테이블
+-- 2. 의도별 설명 문장 테이블 (같은 video_id로 연결)
+CREATE TABLE IF NOT EXISTS cctv_intents (
+    id          UUID    DEFAULT gen_random_uuid() PRIMARY KEY,
+    video_id    UUID    REFERENCES cctv_videos(id) ON DELETE CASCADE,
+    time_sent   TEXT,   -- 시간 관련 설명 문장
+    count_sent  TEXT,   -- 사람 수 관련 설명 문장
+    action_sent TEXT,   -- 행동 관련 설명 문장
+    info_sent   TEXT,   -- 정보 요약 문장
+    error_sent  TEXT,   -- 오류 감지 문장
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. 사람 감지 클립 테이블
 CREATE TABLE IF NOT EXISTS person_clips (
     id          UUID    DEFAULT gen_random_uuid() PRIMARY KEY,
     video_id    UUID    REFERENCES cctv_videos(id) ON DELETE CASCADE,
@@ -396,8 +459,9 @@ CREATE TABLE IF NOT EXISTS person_clips (
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. 인덱스
+-- 4. 인덱스
 CREATE INDEX IF NOT EXISTS idx_cctv_videos_event_date ON cctv_videos(event_date DESC);
+CREATE INDEX IF NOT EXISTS idx_cctv_intents_video_id  ON cctv_intents(video_id);
 CREATE INDEX IF NOT EXISTS idx_person_clips_video_id  ON person_clips(video_id);
 
 -- 4. Storage 버킷 생성 (이미 있으면 건너뜀)
@@ -428,7 +492,11 @@ def process_video(video_path: str):
         print("  -> 프레임을 추출할 수 없습니다.")
         return
 
-    print(f"  분석 프레임: {len(frames)}장 | 사람 감지 클립: {len(person_clips)}개 | 시작 시각: {start_timestamp or 'NULL'}")
+    if start_timestamp is None:
+        start_timestamp = _generate_random_timestamp()
+        print(f"  [OCR 실패] 랜덤 타임스탬프 할당: {start_timestamp}")
+
+    print(f"  분석 프레임: {len(frames)}장 | 사람 감지 클립: {len(person_clips)}개 | 시작 시각: {start_timestamp}")
 
     # GPT 분석
     print(f"  GPT 분석 중... ({len(frames)}프레임 전송)")
@@ -438,15 +506,31 @@ def process_video(video_path: str):
         print(f"  -> [GPT 실패] {type(e).__name__}: {e}")
         video_info = {"summary": f"GPT 분석 실패: {e}", "frames": []}
 
-    # cctv_videos 저장
+    # cctv_videos 저장 (frames 컬럼 제거)
     result = supabase.table('cctv_videos').insert({
         "video_filename": video_file,
-        "event_date":     start_timestamp,   # OCR 실패 시 NULL
+        "event_date":     start_timestamp,
         "summary":        video_info.get("summary", ""),
-        "frames":         video_info.get("frames", []),
     }).execute()
     video_id = result.data[0]['id']
     print(f"  -> cctv_videos 저장 완료 (id: {video_id})")
+
+    # 의도별 문장 생성 및 cctv_intents 저장
+    print("  의도별 문장 생성 중 (GPT)...")
+    client_obj = OpenAI(api_key=api_key)
+    intent_sentences = generate_intent_sentences(client_obj, video_info.get("summary", ""))
+    try:
+        supabase.table('cctv_intents').insert({
+            "video_id":    video_id,
+            "time_sent":   intent_sentences.get("time_sent", ""),
+            "count_sent":  intent_sentences.get("count_sent", ""),
+            "action_sent": intent_sentences.get("action_sent", ""),
+            "info_sent":   intent_sentences.get("info_sent", ""),
+            "error_sent":  intent_sentences.get("error_sent", ""),
+        }).execute()
+        print(f"  -> cctv_intents 저장 완료")
+    except Exception as e:
+        print(f"  -> [cctv_intents 저장 실패] {e}")
 
     # 사람 감지 클립 → Storage 업로드 → person_clips 저장
     for i, (s_sec, e_sec, clip_path) in enumerate(person_clips):
@@ -489,8 +573,8 @@ def main():
         process_video(args.video)
         return
 
-    # 기본 경로: backend/static/sampleData
-    video_dir = args.dir or os.path.join(os.path.dirname(__file__), "..", "static", "sampleData")
+    # 기본 경로: backend/static/mp4Data
+    video_dir = args.dir or os.path.join(os.path.dirname(__file__), "..", "static", "mp4Data")
     if not os.path.exists(video_dir):
         print(f"오류: 디렉토리를 찾을 수 없습니다: {video_dir}")
         return

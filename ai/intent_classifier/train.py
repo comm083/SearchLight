@@ -26,11 +26,11 @@ MAX_LEN = 64
 LEARNING_RATE = 2e-5
 
 LABEL_NAMES = {
-    0: "조회 (SEARCH)",
-    1: "위험 (EMERGENCY)",
-    2: "장애 (ERROR)",
-    3: "출입 (ACCESS)",
-    4: "일상 (GENERAL)"
+    0: "시간 (TIME)",
+    1: "사람 수 (COUNT)",
+    2: "행동 (ACTION)",
+    3: "정보 요약 (SUMMARY)",
+    4: "오류 감지 (ERROR)"
 }
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

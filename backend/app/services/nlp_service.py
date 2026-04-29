@@ -1,9 +1,71 @@
 import os
+import sys
+import json
 from openai import OpenAI
 from dotenv import load_dotenv
 
-# .env 파일에서 환경변수 로드
 load_dotenv()
+
+# 프로젝트 루트를 경로에 추가 (ai 모듈 접근용)
+_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
+# KoBART 문장 교정 (선택적 로드)
+try:
+    from ai.nlp.sentence_correction import correct_stt_text as _correct_stt_text
+    _HAS_KOBART = True
+except Exception:
+    _HAS_KOBART = False
+
+# KoELECTRA 의도 분류 (선택적 로드)
+try:
+    from ai.intent_classifier.classifier import IntentClassifier as _IntentClassifier
+    _HAS_KOELECTRA = True
+except Exception:
+    _HAS_KOELECTRA = False
+
+
+# ── 키워드 상수 ──────────────────────────────────────────────────────
+TIME_KEYWORDS = [
+    "어제", "오늘", "내일", "최근", "아까", "방금", "지금", "이전", "오래된", "옛날",
+    "오전", "오후", "새벽", "아침", "점심", "저녁", "밤",
+    "시간", "시각", "분", "초", "언제", "몇 시", "몇시",
+    "월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일",
+    "주말", "평일", "이번 주", "지난주", "지난 주",
+]
+
+OLDEST_KEYWORDS = ["오래된", "옛날", "예전", "처음", "가장 오래", "오래전", "이전"]
+NEWEST_KEYWORDS = ["최근", "방금", "아까", "요즘", "새로운", "가장 최근", "최신"]
+
+PERSON_KEYWORDS = [
+    "사람", "남자", "여자", "남성", "여성", "아이", "어린이", "청소년", "노인", "어르신",
+    "손님", "고객", "직원", "점원", "알바", "용의자", "도둑", "범인", "침입자",
+    "누군가", "누구", "인물", "행인", "보행자",
+    "들어", "나가", "뛰", "걷", "서있", "앉", "쓰러", "싸우", "훔치", "때리",
+    "입고", "들고", "메고", "옷", "가방", "모자",
+]
+
+COUNT_KEYWORDS = [
+    "몇 명", "몇명", "몇 대", "몇대", "몇 번", "몇번", "몇 회", "몇회",
+    "총", "집계", "통계", "인원", "명수", "대수",
+]
+
+ACTION_KEYWORDS = [
+    "폭행", "절도", "훔치", "도둑", "침입", "담 넘", "싸움", "싸우", "때리",
+    "쓰러", "뛰어", "도망", "낙서", "파손", "난동", "흉기", "강도", "강제",
+]
+
+SUMMARY_KEYWORDS = [
+    "요약", "정리", "보고서", "브리핑", "리포트", "분석", "현황", "내역",
+    "일지", "이력", "통계", "전체", "일주일", "한 달", "월간", "주간",
+]
+
+ERROR_KEYWORDS = [
+    "망가", "고장", "오류", "에러", "작동 안", "안 나와", "안 돼", "끊겼",
+    "노이즈", "흐릿", "멈춰", "재부팅", "연결", "저장 안", "녹화 안",
+]
+
 
 class NLPService:
     def __init__(self):
@@ -13,6 +75,22 @@ class NLPService:
             self.client = None
             return
         self.client = OpenAI(api_key=api_key)
+
+        # KoELECTRA 의도 분류기 초기화 (선택적)
+        self._koelectra = None
+        if _HAS_KOELECTRA:
+            try:
+                clf = _IntentClassifier()
+                model_path = os.path.join(_project_root, "model", "koelectra_finetuned")
+                if os.path.exists(model_path):
+                    clf.load_model(model_path)
+                    print(f"[NLP] KoELECTRA 학습 모델 로드 완료: {model_path}")
+                else:
+                    print("[NLP] KoELECTRA 기본(사전학습) 모델 사용 중.")
+                self._koelectra = clf
+            except Exception as e:
+                print(f"[NLP] KoELECTRA 로드 실패 (규칙 기반으로 대체): {e}")
+
         print("[Service] OpenAI NLP 서비스 초기화 완료!")
 
     def generate_security_report(self, query: str, contexts: list, intent: str = "SUMMARIZATION", is_fallback: bool = False, requested_time: str = "알 수 없는 시간"):
@@ -114,6 +192,7 @@ class NLPService:
             return response.choices[0].message.content.strip()
         except Exception as e:
             return "반갑습니다. 지능형 보안 분석관 SearchLight입니다. 무엇을 도와드릴까요?\n\n저는 CCTV 영상 분석과 보안 관제에 최적화되어 있습니다. 원활한 분석을 위해 아래와 같이 보안/관제와 관련된 질문을 입력해 주시기 바랍니다.\n\n💡 **질문 예시:**\n- 인물 검색: '빨간색 옷을 입은 사람 찾아줘'\n- 상황 요약: '어제 오후 주차장 상황 요약해줘'\n- 실시간 확인: '지금 로비에 특이사항 있어?'"
+
 
 # 싱글톤 인스턴스 생성
 nlp_service = NLPService()

@@ -25,7 +25,7 @@ class IntentResponse(BaseModel):
 async def predict_intent(request: QueryRequest):
     """
     사용자 질의의 의도를 5가지 카테고리로 분류하여 반환합니다.
-    (조회, 위험, 장애, 출입, 일상)
+    (시간, 사람 수, 행동, 정보 요약, 오류 감지)
     """
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
