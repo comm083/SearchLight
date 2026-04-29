@@ -9,10 +9,17 @@ class SupabaseService:
     def __init__(self):
         url: str = os.getenv("SUPABASE_URL")
         key: str = os.getenv("SUPABASE_KEY")
+        if not url or not key:
+            print("[Warning] Supabase 설정이 없습니다. 로그 저장 기능이 비활성화됩니다.")
+            self.supabase = None
+            return
         self.supabase: Client = create_client(url, key)
         print("[Service] Supabase 클라우드 DB 연동 완료!")
 
     def log_search(self, query: str, intent: str, session_id: str = "default", ai_report: str = None):
+        if not self.supabase:
+            print(f"[Mock DB] 로그 기록 (DB 연결 없음): {query} / {intent}")
+            return
         try:
             # Supabase 'search_logs' 테이블에 데이터 전송
             data = {
@@ -47,6 +54,9 @@ class SupabaseService:
         """
         실시간 감지된 이상 행동 알림을 Supabase 'alerts' 테이블에 저장합니다.
         """
+        if not self.supabase:
+            print(f"[Mock DB] 알림 기록 (DB 연결 없음): {alert_data.get('type')}")
+            return
         try:
             response = self.supabase.table('alerts').insert(alert_data).execute()
             print(f"[Supabase] 실시간 알림 DB 저장 성공: {alert_data.get('type')}")

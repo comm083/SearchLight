@@ -9,7 +9,9 @@ class NLPService:
     def __init__(self):
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            print("[Warning] OPENAI_API_KEY가 설정되지 않았습니다.")
+            print("[Warning] OPENAI_API_KEY가 설정되지 않았습니다. AI 보고서 기능이 비활성화됩니다.")
+            self.client = None
+            return
         self.client = OpenAI(api_key=api_key)
         print("[Service] OpenAI NLP 서비스 초기화 완료!")
 
@@ -17,6 +19,9 @@ class NLPService:
         """
         검색된 장면들(contexts)을 바탕으로 의도(intent)에 맞는 자연어 보안 보고서를 생성합니다.
         """
+        if not self.client:
+            return "AI 보고서 기능이 비활성화 상태입니다. (OpenAI API 키 필요)"
+        
         if not contexts:
             return f"죄송합니다. 요청하신 {requested_time} 근처에는 기록된 보안 이벤트가 없습니다."
 
@@ -85,6 +90,8 @@ class NLPService:
         """
         보안과 관련 없는 질문(Out-of-Distribution)에 대해 친절하게 거절하며 가이드를 제공합니다.
         """
+        if not self.client:
+            return "안녕하세요. 저는 지능형 보안 AI SearchLight입니다. 현재는 보안 및 CCTV 관제와 관련된 질문에 대해서만 도움을 드릴 수 있습니다. 궁금하신 보안 사항이 있다면 말씀해 주세요."
         try:
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",

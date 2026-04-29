@@ -9,6 +9,7 @@ const App = () => {
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [loading, setLoading] = useState(false);
   const [expandedResults, setExpandedResults] = useState({}); // 확장된 카드 상태 관리
   
@@ -20,7 +21,6 @@ const App = () => {
   const [loginInput, setLoginInput] = useState({ id: '', pw: '' });
 
   const [recentSearches, setRecentSearches] = useState([]);
-  
   const [searchTerm, setSearchTerm] = useState('');
   
   // 설정 관련 상태
@@ -122,18 +122,66 @@ const App = () => {
     setShowLogoutModal(false);
   };
 
+  // STT (음성 인식) 함수
   const startListening = () => {
-    if (!('webkitSpeechRecognition' in window)) return;
+    if (!('webkitSpeechRecognition' in window)) {
+      alert("이 브라우저는 음성 인식을 지원하지 않습니다.");
+      return;
+    }
     const recognition = new window.webkitSpeechRecognition();
     recognition.lang = 'ko-KR';
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
+    recognition.interimResults = false;
+    recognition.continuous = false;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    };
+
+    recognition.onerror = (event) => {
+      console.error("Speech recognition error:", event.error);
+      setIsListening(false);
+      if (event.error === 'not-allowed') {
+        alert("마이크 권한이 거부되었습니다.");
+      } else if (event.error === 'audio-capture') {
+        alert("마이크를 찾을 수 없습니다.");
+      }
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
-      setQuery(transcript);
-      handleSearch(transcript);
+      if (transcript.trim()) {
+        setQuery(transcript);
+        handleSearch(transcript);
+      }
     };
-    recognition.start();
+
+    try {
+      recognition.start();
+    } catch (e) {
+      console.error("Recognition start failed:", e);
+      setIsListening(false);
+    }
+  };
+
+  // TTS (음성 출력) 함수
+  const speak = (text) => {
+    if (!window.speechSynthesis || !text) return;
+    window.speechSynthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'ko-KR';
+    utterance.rate = 1.0;
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    
+    window.speechSynthesis.speak(utterance);
   };
 
   const handleSearch = async (text = query) => {
@@ -148,18 +196,28 @@ const App = () => {
     setQuery('');
     setLoading(true);
     try {
-      const sessionId = isLoggedIn ? user.name : 'guest';
+      const sessionIdForBackend = isLoggedIn ? user.name : 'guest';
       const res = await fetch('http://localhost:8000/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           query: text, 
           top_k: 4,
-          session_id: sessionId
+          session_id: sessionIdForBackend
         }),
       });
       const data = await res.json();
-      setMessages(prev => [...prev, { type: 'ai', report: data.ai_report || data.answer || "보안 관련 질문을 입력해 주세요.", results: data.results || [], intent: data.intent_info?.intent || "OOD" }]);
+      const aiReport = data.ai_report || data.answer || "보안 관련 질문을 입력해 주세요.";
+      
+      setMessages(prev => [...prev, { 
+        type: 'ai', 
+        report: aiReport, 
+        results: data.results || [], 
+        intent: data.intent_info?.intent || "OOD" 
+      }]);
+      
+      // AI 보고서 자동 읽기
+      speak(aiReport);
       
       // 검색 성공 후 히스토리 갱신
       fetchHistory();
@@ -174,7 +232,15 @@ const App = () => {
     <div className="app-container">
       <aside className="sidebar">
         <button className="new-chat-btn" onClick={handleNewChat}><Plus size={18} /><span>새 채팅</span></button>
-        <div className="search-box"><Search className="search-icon" size={14} /><input type="text" placeholder="최근 기록 검색..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+        <div className="search-box">
+          <Search className="search-icon" size={14} />
+          <input 
+            type="text" 
+            placeholder="최근 기록 검색..." 
+            value={searchTerm} 
+            onChange={(e) => setSearchTerm(e.target.value)} 
+          />
+        </div>
         <div className="history-section">
           <div className="history-title"><Clock size={12} /><span>최근 검색 기록</span></div>
           <div className="history-section-container" style={{maxHeight: 'calc(100vh - 250px)', overflowY: 'auto'}}>
@@ -230,7 +296,6 @@ const App = () => {
                 지능형 보안 분석관 <span style={{fontWeight: '700', color: '#3b82f6'}}>SearchLight</span>입니다.<br/>
                 <span style={{fontSize: '18px', color: '#9ca3af'}}>CCTV 분석 및 보안 관련 질문을 입력하세요.</span>
               </h1>
-
             </div>
           ) : (
             <div style={{maxWidth: '800px', margin: '0 auto'}}>
@@ -241,9 +306,11 @@ const App = () => {
                   ) : (
                     <div style={{width: '100%', backgroundColor: msg.intent === 'ERROR' ? '#450a0a' : '#1a2235', padding: '25px', borderRadius: '15px', border: msg.intent === 'ERROR' ? '1px solid #ef4444' : '1px solid rgba(255,255,255,0.1)'}}>
                       <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px', color: msg.intent === 'ERROR' ? '#f87171' : '#3b82f6', fontSize: '13px', fontWeight: 'bold'}}>{msg.intent === 'ERROR' ? <AlertCircle size={16} /> : <Shield size={16} />} {msg.intent === 'ERROR' ? "시스템 오류" : "AI 분석 보고서"}<span style={{flex: 1}}></span><span style={{fontSize: '10px', color: '#6b7280'}}>{msg.intent}</span></div>
+                      
                       <div style={{fontSize: '14px', lineHeight: '1.7', color: '#d1d5db', whiteSpace: 'pre-wrap', backgroundColor: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)'}}>
                         {msg.report}
                       </div>
+
                       {msg.results?.length > 0 && (
                         <div style={{marginTop: '20px'}}>
                           {settings.viewMode === 'list' ? (
@@ -267,33 +334,28 @@ const App = () => {
                                           </div>
                                           <div style={{fontSize: '13px', color: '#f3f4f6', lineHeight: '1.4', marginBottom: '8px'}}>{res.description}</div>
                                         </div>
-                                        {res.detections?.length > 0 && (
+                                        {res.frames?.length > 0 && (
                                           <button 
                                             onClick={() => setExpandedResults(prev => ({...prev, [resultKey]: !prev[resultKey]}))}
                                             style={{background: 'rgba(59, 130, 246, 0.1)', border: 'none', color: '#60a5fa', fontSize: '11px', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '4px'}}
                                           >
-                                            {isExpanded ? '상세 정보 접기' : `${res.detections.length}개의 상세 묘사 보기`}
+                                            {isExpanded ? '상세 정보 접기' : `${res.frames.length}개의 상세 프레임 보기`}
                                           </button>
                                         )}
                                       </div>
                                     </div>
                                     
-                                    {isExpanded && res.detections?.length > 0 && (
+                                    {isExpanded && res.frames?.length > 0 && (
                                       <div style={{padding: '0 15px 15px', borderTop: '1px solid rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.02)'}}>
                                         <div style={{marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative'}}>
                                           <div style={{position: 'absolute', left: '75px', top: '5px', bottom: '5px', width: '2px', backgroundColor: 'rgba(59, 130, 246, 0.2)'}}></div>
-                                          {res.detections.map((det, k) => {
-                                            const timeStr = det.time && det.time.includes('T') 
-                                              ? det.time.split('T')[1].split('.')[0] 
-                                              : (det.time && det.time.includes(' ') ? det.time.split(' ')[1] : det.time);
-                                            return (
-                                              <div key={k} style={{display: 'flex', gap: '20px', alignItems: 'center', fontSize: '12px', position: 'relative', zIndex: 1}}>
-                                                <div style={{color: '#3b82f6', fontWeight: 'bold', whiteSpace: 'nowrap', width: '60px', textAlign: 'right'}}>{timeStr}</div>
-                                                <div style={{width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#3b82f6', border: '2px solid #0b0f19', marginLeft: '-5px'}}></div>
-                                                <div style={{color: '#d1d5db', lineHeight: '1.4', backgroundColor: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '8px', flex: 1}}>{det.description}</div>
-                                              </div>
-                                            );
-                                          })}
+                                          {res.frames.map((f, k) => (
+                                            <div key={k} style={{display: 'flex', gap: '20px', alignItems: 'center', fontSize: '12px', position: 'relative', zIndex: 1}}>
+                                              <div style={{color: '#3b82f6', fontWeight: 'bold', whiteSpace: 'nowrap', width: '60px', textAlign: 'right'}}>{f.timestamp || f.time}</div>
+                                              <div style={{width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#3b82f6', border: '2px solid #0b0f19', marginLeft: '-5px'}}></div>
+                                              <div style={{color: '#d1d5db', lineHeight: '1.4', backgroundColor: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '8px', flex: 1}}>{f.notes || f.person || f.description}</div>
+                                            </div>
+                                          ))}
                                         </div>
                                       </div>
                                     )}
@@ -308,11 +370,6 @@ const App = () => {
                                 <div style={{fontSize: '20px', fontWeight: 'bold', color: 'white', marginBottom: '5px'}}>건물 도면 기반 위치 확인 중</div>
                                 <div style={{fontSize: '14px', color: '#6b7280'}}>감지된 이벤트 {msg.results.length}건이 지도에 표시됩니다.</div>
                               </div>
-                              <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
-                                {msg.results.map((res, idx) => (
-                                  <div key={idx} style={{width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#ef4444', boxShadow: '0 0 10px #ef4444', animation: 'pulse 1.5s infinite'}}></div>
-                                ))}
-                              </div>
                             </div>
                           )}
                         </div>
@@ -326,9 +383,32 @@ const App = () => {
           )}
         </div>
 
-        <div className="input-area"><div className="input-container" style={{padding: '20px 40px 40px'}}><div className="input-wrapper">
-          <Plus size={20} style={{color: '#6b7280', cursor: 'pointer'}} /><input type="text" placeholder="질문을 입력하세요..." value={query} onChange={(e) => setQuery(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSearch()} /><Mic size={20} className="icon-btn" onClick={startListening} style={{color: isListening ? '#3b82f6' : '#6b7280'}} /><button className="icon-btn send-btn" onClick={() => handleSearch()} style={{marginLeft: '10px'}}><Send size={18} /></button>
-        </div></div></div>
+        <div className="input-area"><div className="input-container" style={{padding: '20px 40px 40px', position: 'relative'}}>
+          {(isListening || isSpeaking) && (
+            <div className="voice-indicator">
+              <div className="waveform">
+                {[...Array(5)].map((_, i) => <div key={i} className="bar" style={{animationDelay: `${i * 0.15}s`}}></div>)}
+              </div>
+              <span>{isListening ? "말씀해 주세요..." : "보고서를 읽어드리는 중입니다..."}</span>
+            </div>
+          )}
+          <div className="input-wrapper">
+            <Plus size={20} style={{color: '#6b7280', cursor: 'pointer'}} />
+            <input 
+              type="text" 
+              placeholder="질문을 입력하세요..." 
+              value={query} 
+              onChange={(e) => setQuery(e.target.value)} 
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()} 
+            />
+            <button className={`mic-btn ${isListening ? 'listening' : ''}`} onClick={startListening} title="음성 검색">
+              <Mic size={20} />
+            </button>
+            <button className="icon-btn send-btn" onClick={() => handleSearch()} style={{marginLeft: '10px', width: '42px', height: '42px', borderRadius: '10px'}}>
+              <Send size={18} />
+            </button>
+          </div>
+        </div></div>
       </main>
 
       {/* Login Modal */}
@@ -373,7 +453,6 @@ const App = () => {
             </div>
 
             <div style={{display: 'flex', flexDirection: 'column', gap: '20px'}}>
-              {/* 섹션 1: 보안 알림 */}
               <section>
                 <h3 style={{fontSize: '16px', color: '#3b82f6', marginBottom: '10px', fontWeight: '600'}}>🚨 보안 알림 설정</h3>
                 <div style={{backgroundColor: '#1f2937', padding: '15px', borderRadius: '15px', display: 'flex', flexDirection: 'column', gap: '15px'}}>
@@ -410,7 +489,6 @@ const App = () => {
                 </div>
               </section>
 
-              {/* 섹션 2: 화면 설정 */}
               <section>
                 <h3 style={{fontSize: '16px', color: '#3b82f6', marginBottom: '10px', fontWeight: '600'}}>📺 화면 레이아웃</h3>
                 <div style={{display: 'flex', gap: '10px'}}>
@@ -434,24 +512,6 @@ const App = () => {
                     <div style={{fontSize: '18px', marginBottom: '4px'}}>🗺️</div>
                     <div style={{fontSize: '15px', fontWeight: 'bold'}}>지도 형태</div>
                   </button>
-                </div>
-              </section>
-
-              {/* 섹션 3: 데이터 관리 */}
-              <section>
-                <h3 style={{fontSize: '16px', color: '#3b82f6', marginBottom: '10px', fontWeight: '600'}}>💾 데이터 및 시스템</h3>
-                <div style={{backgroundColor: '#1f2937', padding: '15px', borderRadius: '15px', display: 'flex', flexDirection: 'column', gap: '12px'}}>
-                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                    <span style={{fontSize: '14px'}}>기록 내보내기</span>
-                    <button style={{backgroundColor: 'transparent', border: '1px solid #3b82f6', color: '#3b82f6', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer'}}>파일 다운로드</button>
-                  </div>
-                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px'}}>
-                    <span style={{fontSize: '14px'}}>연결 상태</span>
-                    <div style={{display: 'flex', alignItems: 'center', gap: '6px'}}>
-                      <div style={{width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10b981'}}></div>
-                      <span style={{fontSize: '12px', color: '#10b981'}}>정상 (24ms)</span>
-                    </div>
-                  </div>
                 </div>
               </section>
             </div>
