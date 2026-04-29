@@ -37,5 +37,31 @@ class SupabaseService:
             # 테이블이 없거나 권한 문제일 수 있으므로 에러 메시지 출력
             print(f"[Supabase Error] 알림 저장 실패: {e}")
 
+    def get_latest_status(self, location: str = None):
+        """
+        특정 구역 또는 전체 구역의 가장 최신 보안 이벤트를 가져옵니다. (Localization 용)
+        """
+        try:
+            query = self.supabase.table('cctv_vectors').select('content, metadata').order('metadata->timestamp', desc=True).limit(1)
+            
+            if location:
+                # location 필터링 (metadata 내의 location 필드 기준)
+                # Supabase에서는 json 필터링이 가능함
+                query = query.filter('metadata->>location', 'eq', location)
+            
+            response = query.execute()
+            if response.data:
+                item = response.data[0]
+                return {
+                    "description": item['content'],
+                    "timestamp": item['metadata'].get('timestamp'),
+                    "location": item['metadata'].get('location'),
+                    "image_path": item['metadata'].get('image_path')
+                }
+            return None
+        except Exception as e:
+            print(f"[Supabase Error] 최신 상태 조회 실패: {e}")
+            return None
+
 # 싱글톤 패턴 (서버 내에서 한 번만 생성되도록)
 db_service = SupabaseService()

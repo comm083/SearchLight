@@ -28,11 +28,24 @@ async def seed_today_data():
         {"desc": "오후 15:45, 엘리베이터 2호기 내부 청소 작업 진행 중", "img": "/static/images/cctv_7.jpg"},
         {"desc": "오후 16:10, 뒷문 보안 게이트를 통해 직원 1명 정상 퇴근 확인", "img": "/static/images/cctv_8.jpg"},
         {"desc": "오후 16:30, 옥상 정원 구역 배회자 1명 확인 (특이사항 없음)", "img": "/static/images/cctv_9.jpg"},
-        {"desc": "오후 16:45, 현재 정문 보안 데스크 인근 유동 인원 2명 포착", "img": "/static/images/cctv_10.jpg"}
+        {"desc": "오후 16:45, 현재 정문 보안 데스크 인근 유동 인원 2명 포착", "img": "/static/images/cctv_10.jpg"},
+        {"desc": "오후 18:20, 정문 입구 셔터 하강 및 야간 보안 모드 전환 확인", "img": "/static/images/cctv_1.jpg"},
+        {"desc": "오후 19:45, 2층 복도에서 보안 요원이 정기 순찰 중인 모습 포착", "img": "/static/images/cctv_2.jpg"},
+        {"desc": "오후 20:10, 지하 주차장 B1구역 전등 점검 작업 종료 후 작업자 철수", "img": "/static/images/cctv_3.jpg"}
     ]
 
     for i, event in enumerate(today_events):
-        event_time = f"{today_str} {9 + (i // 4):02d}:{(i % 4) * 15:02d}:00"
+        # 시간을 더 넓게 분포시키기 위해 조정 (9시부터 21시까지)
+        hour = 9 + (i * 12 // len(today_events))
+        minute = (i * 60 // 1) % 60 # 그냥 예시용
+        # 더 간단하게:
+        event_time = f"{today_str} {9 + (i * 45 // 60):02d}:{(i * 45) % 60:02d}:00"
+        
+        # 실제로는 위 로직도 복잡하니 수동 매칭 느낌으로:
+        hours = [9, 10, 11, 13, 14, 15, 15, 16, 16, 16, 18, 19, 20]
+        minutes = [15, 30, 45, 20, 10, 5, 45, 10, 30, 45, 20, 45, 10]
+        event_time = f"{today_str} {hours[i]:02d}:{minutes[i]:02d}:00"
+
         content = f"[{event_time}] {event['desc']}"
         embedding = model.encode(content).tolist()
         
