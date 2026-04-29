@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Shield, AlertCircle, Clock } from 'lucide-react';
+import { Shield, AlertCircle, Clock, Play, Video, XCircle } from 'lucide-react';
 
 /**
  * 검색 결과 카드 한 개를 렌더링하는 서브 컴포넌트
  */
 const ResultCard = ({ res, msgIdx, resIdx }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showVideo, setShowVideo] = useState(false);
   const resultKey = `${msgIdx}-${resIdx}`;
 
   return (
@@ -27,14 +28,32 @@ const ResultCard = ({ res, msgIdx, resIdx }) => {
             </div>
             <div style={{ fontSize: '13px', color: '#f3f4f6', lineHeight: '1.4', marginBottom: '8px' }}>{res.description}</div>
           </div>
-          {res.detections?.length > 0 && (
-            <button onClick={() => setIsExpanded(prev => !prev)}
-              style={{ background: 'rgba(59,130,246,0.1)', border: 'none', color: '#60a5fa', fontSize: '11px', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              {isExpanded ? '상세 정보 접기' : `${res.detections.length}개의 상세 묘사 보기`}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {res.detections?.length > 0 && (
+              <button onClick={() => setIsExpanded(prev => !prev)}
+                style={{ background: 'rgba(59,130,246,0.1)', border: 'none', color: '#60a5fa', fontSize: '11px', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {isExpanded ? '정보 접기' : '상세 정보'}
+              </button>
+            )}
+            <button onClick={() => setShowVideo(prev => !prev)}
+              style={{ background: 'rgba(239,68,68,0.1)', border: 'none', color: '#f87171', fontSize: '11px', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {showVideo ? <XCircle size={12} /> : <Play size={12} />}
+              {showVideo ? '영상 닫기' : '영상 재생'}
             </button>
-          )}
+          </div>
         </div>
       </div>
+
+      {showVideo && (
+        <div style={{ padding: '15px', borderTop: '1px solid rgba(255,255,255,0.05)', backgroundColor: '#000' }}>
+          <video 
+            src={`http://localhost:8000${res.video_url}`} 
+            controls 
+            autoPlay 
+            style={{ width: '100%', borderRadius: '8px', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}
+          />
+        </div>
+      )}
 
       {isExpanded && res.detections?.length > 0 && (
         <div style={{ padding: '0 15px 15px', borderTop: '1px solid rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.02)' }}>

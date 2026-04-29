@@ -1,7 +1,7 @@
 import os
 import sys
 import json
-from openai import OpenAI
+from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -74,7 +74,7 @@ class NLPService:
             print("[Warning] OPENAI_API_KEY가 설정되지 않았습니다. AI 보고서 기능이 비활성화됩니다.")
             self.client = None
         else:
-            self.client = OpenAI(api_key=api_key)
+            self.client = AsyncOpenAI(api_key=api_key)
 
         # KoELECTRA 의도 분류기 초기화 (선택적)
         self._koelectra = None
@@ -93,7 +93,7 @@ class NLPService:
 
         print("[Service] OpenAI NLP 서비스 초기화 완료!")
 
-    def generate_security_report(self, query: str, contexts: list, intent: str = "SUMMARIZATION", is_fallback: bool = False, requested_time: str = "알 수 없는 시간", mode: str = "summary"):
+    async def generate_security_report(self, query: str, contexts: list, intent: str = "SUMMARIZATION", is_fallback: bool = False, requested_time: str = "알 수 없는 시간", mode: str = "summary", max_score: float = 100.0):
         """
         검색된 장면들(contexts)을 바탕으로 의도(intent)에 맞는 자연어 보안 보고서를 생성합니다.
         """
@@ -139,8 +139,14 @@ class NLPService:
             # 📊 [기본] 요약 보고서용 프롬프트
             system_prompt = "당신은 지능형 CCTV 보안 분석 AI '서치라이트'의 전문 보안 분석관입니다. 가독성을 위해 불필요한 미사여구를 제거하고, 핵심 정보만 1~2문장 내외로 매우 간결하게 보고합니다."
 
+        # 환각 방지 지침 추가
+        hallucination_instruction = ""
+        if max_score < 40:
+            hallucination_instruction = "🚨 [경고]: 현재 검색된 데이터와 사용자 질문의 유사도가 매우 낮습니다. 질문에 포함된 특정 키워드(색상, 행동 등)가 데이터에 없다면 절대로 있다고 말하지 마세요. 대신 '요청하신 구체적인 상황은 찾을 수 없으나, 가장 유사한 장면을 보고합니다'라고 명시하세요.\n"
+        
         user_prompt = f"""
 {fallback_notice}
+{hallucination_instruction}
 의도: {intent} ({specific_instruction})
 사용자 질문: {query}
 요청 시각: {requested_time}
@@ -155,7 +161,7 @@ class NLPService:
    - 🔍 **핵심 분석**: 포착된 주요 장면과 특징을 1~2문장으로 요약 (상세 타임라인 근거)
    - 🚨 **위험 및 조치**: 위험 수준(낮음~긴급)과 필요한 조치 제언. (단, 위험 수준이 **'낮음'**인 경우에는 "추가 감시 및 신고 필요"와 같은 경고성 문구는 제외하고 안심할 수 있는 표현을 사용하세요.)
 2. [중요] 사용자가 요청한 날짜({requested_time})에 데이터가 없다면, 반드시 "요청하신 시간대의 기록은 없으나 대안으로 가장 가까운 기록을 보고합니다"라고 명확히 서두에 밝히세요. 
-3. [중요] 절대 실제 데이터에 없는 날짜를 지어내거나, 다른 날짜의 데이터를 요청 날짜인 것처럼 속이지 마세요.
+3. [중요] 절대 실제 데이터에 없는 객체(색상, 모자 등)나 행동(춤, 폭행 등)을 지어내거나, 질문에 맞춰서 데이터를 왜곡하지 마세요. 데이터에 없다면 "기록을 찾을 수 없습니다"라고 명확히 답하세요.
 4. [중요] 모든 핵심 사실 뒤에는 근거가 되는 타임스탬프를 대괄호 안에 표기하세요. (예: "인물 포착 [10:05]")
 5. 각 섹션은 **최대 2문장**을 넘지 마세요.
 6. 마지막에 "분석 완료. 이상입니다."와 같은 형식적인 맺음말은 **절대 포함하지 마세요.**
@@ -163,18 +169,18 @@ class NLPService:
         
         try:
             # 1. 보고서 생성 시도
-            report = self._call_llm(system_prompt, user_prompt)
+            report = await self._call_llm(system_prompt, user_prompt)
             
             # 2. 고도화된 사실 관계 검증 (Anti-Hallucination Verification)
-            is_valid, corrected_report = self._verify_report(report, requested_time, context_text)
+            is_valid, corrected_report = self._verify_report(report, requested_time, context_text, query=query, is_fallback=is_fallback)
             
             if not is_valid:
                 print(f"[NLP Service] 사실 관계 모순 감지! 재교정 수행 중...")
                 # 재교정 프롬프트와 함께 한 번 더 시도
                 retry_prompt = f"{system_prompt}\n\n[🚨 재교정 요청] 방금 생성된 보고서에서 날짜나 사실 관계 오류가 발견되었습니다. 실제 데이터 시점과 요청 시점을 엄격히 구분하여 다시 작성해 주세요."
-                report = self._call_llm(retry_prompt, user_prompt)
+                report = await self._call_llm(retry_prompt, user_prompt)
                 # 최종 검증 (그래도 틀리면 경고 문구 강제 삽입)
-                _, final_report = self._verify_report(report, requested_time, context_text, force_warning=True)
+                _, final_report = self._verify_report(report, requested_time, context_text, query=query, is_fallback=is_fallback, force_warning=True)
                 return final_report
                 
             return corrected_report
@@ -183,9 +189,9 @@ class NLPService:
             print(f"[NLP Error] AI 보고서 생성 중 오류: {e}")
             return "보안 보고서를 생성하는 동안 기술적인 문제가 발생했습니다. 잠시 후 다시 시도해 주세요."
 
-    def _call_llm(self, system_prompt: str, user_content: str) -> str:
+    async def _call_llm(self, system_prompt: str, user_content: str) -> str:
         """LLM 호출 공통 로직"""
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -195,7 +201,7 @@ class NLPService:
         )
         return response.choices[0].message.content
 
-    def _verify_report(self, report: str, requested_time: str, context: str, force_warning: bool = False) -> tuple[bool, str]:
+    def _verify_report(self, report: str, requested_time: str, context: str, query: str = "", is_fallback: bool = False, force_warning: bool = False) -> tuple[bool, str]:
         """
         생성된 보고서의 사실 관계를 검증합니다.
         1. 요청 시간과 실제 데이터 시간이 혼용되었는지 체크
@@ -221,20 +227,31 @@ class NLPService:
                     is_valid = False
                     break
         
+        # 사실 관계 검증 (데이터와 질문 키워드 대조)
+        if not is_fallback:
+            # 질문에 있는 주요 키워드(파란색, 춤 등)가 실제 데이터(context)에 전혀 없는데 
+            # 보고서에는 긍정적으로 언급되었는지 체크
+            check_keywords = ["파란", "빨간", "노란", "초록", "춤", "폭행", "절도", "뛰", "넘", "싸움"]
+            for kw in check_keywords:
+                if kw in query and kw not in context and kw in report:
+                    # 환각 가능성 높음 -> 보고서 보정
+                    is_valid = False
+                    break
+
         # 검증 실패 시 또는 강제 경고 필요 시 문구 보정
         if not is_valid or force_warning:
-            warning_msg = "\n\n> ⚠️ **검증 알림**: 본 보고서는 요청하신 시간대의 데이터가 존재하지 않아 시스템에서 검색된 가장 인접한 시간대의 데이터를 기반으로 작성되었습니다."
+            warning_msg = "\n\n> ⚠️ **신뢰도 경고**: 검색된 데이터와 질문 내용 간의 일치도가 낮아 보고서 내용에 환각이 포함되었을 수 있습니다. 하단의 실제 영상 및 로그를 반드시 대조해 주세요."
             if warning_msg not in report:
                 report += warning_msg
                 
         return is_valid, report
 
-    def generate_ood_response(self, user_query: str):
+    async def generate_ood_response(self, user_query: str):
         """
         보안과 관련 없는 질문(Out-of-Distribution)에 대해 친절하게 거절하며 가이드를 제공합니다.
         """
         try:
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": """너는 SearchLight라는 지능형 CCTV 보안 분석 AI야. 

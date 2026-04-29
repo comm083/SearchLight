@@ -25,7 +25,7 @@ const ChatSidebar = ({
 
     <div className="history-section">
       <div className="history-title"><Clock size={12} /><span>최근 검색 기록</span></div>
-      <div className="history-section-container" style={{ maxHeight: 'calc(100vh - 250px)', overflowY: 'auto' }}>
+      <div className="history-section-container" style={{ maxHeight: 'calc(100vh - 250px)' }}>
         {recentSearches
           .filter(item => item.title.toLowerCase().includes(searchTerm.toLowerCase()))
           .map(item => (

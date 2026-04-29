@@ -101,7 +101,7 @@ export function useChat(user, isLoggedIn) {
       const res = await fetch(`${API_BASE}/api/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: text, top_k: 4, session_id: sessionId }),
+        body: JSON.stringify({ query: text, top_k: 1, session_id: sessionId }),
       });
       const data = await res.json();
       const aiMsg = {
