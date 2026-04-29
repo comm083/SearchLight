@@ -68,11 +68,16 @@ async def process_user_query(request: SearchRequest):
     pronouns = ["그", "거기", "그때", "이전", "다시", "아까", "마지막", "방금", "방금 전"]
     has_pronoun = any(p in query_text for p in pronouns)
 
-    # 2. 의도 분류 (KoELECTRA - 5종)
-    intent_result = intent_service.classify(query_text)
+    # 2. NLP 전처리: 문장 교정 → 관점별 재작성 → 의도 분류 (KoELECTRA)
+    preprocess = nlp_service.preprocess_query(query_text)
+    corrected_query = preprocess["corrected"]
+    search_query = preprocess["best_query"]   # FAISS 검색에 사용할 최적 쿼리
+
+    # 2-1. 규칙 기반 의도 분류 (라우팅용)
+    intent_result = intent_service.classify(corrected_query)
     current_intent = intent_result.intent
 
-    # 2-1. 일상 질의(CHITCHAT) 예외 처리 (Out-of-Distribution Handling)
+    # 2-2. 일상 질의(CHITCHAT) 예외 처리 (Out-of-Distribution Handling)
     if current_intent == "CHITCHAT":
         answer = nlp_service.generate_ood_response(query_text)
         return {
@@ -96,8 +101,8 @@ async def process_user_query(request: SearchRequest):
     else:
         context_used = False
 
-    # 3. 시간 표현 파싱 (새로운 파서 사용)
-    parsed_time = time_parser.parse(query_text)
+    # 3. 시간 표현 파싱 (교정된 쿼리 기준)
+    parsed_time = time_parser.parse(corrected_query)
     
     if not parsed_time and has_pronoun and "last_time" in memory:
         time_info = memory["last_time"]
@@ -128,8 +133,8 @@ async def process_user_query(request: SearchRequest):
 
     # 검색이 필요한 의도인 경우 (대부분의 보안 질의)
     if current_intent in ("SUMMARIZATION", "BEHAVIORAL", "CAUSAL", "COUNTING", "LOCALIZATION"):
-        # [Cloud Native] Supabase Vector DB에서 검색 수행
-        search_results = vector_db_service.search(query=query_text, top_k=request.top_k)
+        # [Cloud Native] Supabase Vector DB에서 검색 수행 (summary + 의도 문장 혼합)
+        search_results = vector_db_service.search(query=search_query, top_k=request.top_k, intent=current_intent)
         response_data["results"] = search_results
         
         # [Advanced RAG] 검색 결과를 바탕으로 AI 보안 보고서 생성

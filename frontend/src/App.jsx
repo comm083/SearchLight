@@ -1,335 +1,231 @@
-import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
-import { Search, ShieldAlert, Camera, History, UserCheck, AlertTriangle, MessageSquare, Loader2, Sparkles, Mic, Volume2, Square } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Mic, Send, Plus, Search, Shield,
+  Clock, Settings, User, MoreVertical, AlertCircle, X, Lock, LogIn, LogOut
+} from 'lucide-react';
 
-const INTENT_ICONS = {
-  SEARCH: { icon: Search, color: "text-blue-400", bg: "bg-blue-400/10", label: "조회" },
-  EMERGENCY: { icon: ShieldAlert, color: "text-red-400", bg: "bg-red-400/10", label: "위험" },
-  ERROR: { icon: AlertTriangle, color: "text-yellow-400", bg: "bg-yellow-400/10", label: "장애" },
-  ACCESS: { icon: UserCheck, color: "text-green-400", bg: "bg-green-400/10", label: "출입" },
-  GENERAL: { icon: MessageSquare, color: "text-purple-400", bg: "bg-purple-400/10", label: "일상" },
-  CHITCHAT: { icon: MessageSquare, color: "text-pink-400", bg: "bg-pink-400/10", label: "잡담" }
-};
-
-function App() {
+const App = () => {
   const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [messages, setMessages] = useState([]);
   const [isListening, setIsListening] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const recognitionRef = useRef(null);
+  const [loading, setLoading] = useState(false);
 
-  // 음성 인식 설정 (Web Speech API)
+  // 로그인/로그아웃 관련 상태
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [user, setUser] = useState({ name: '방문객', role: 'Guest' });
+  const [loginInput, setLoginInput] = useState({ id: '', pw: '' });
+
+  const [recentSearches, setRecentSearches] = useState([
+    { id: 1, title: '검은색 지갑', location: '3층 회의실', date: '2026-04-20', messages: [], user: '김지은님' },
+    { id: 2, title: '애플 노트북', location: '카페테리아', date: '2026-04-19', messages: [], user: '박민수님' }
+  ]);
+
+  const chatEndRef = useRef(null);
+
   useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'ko-KR';
-      recognition.interimResults = false;
-      recognition.continuous = false;
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-      recognition.onstart = () => setIsListening(true);
-      recognition.onend = () => setIsListening(false);
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setQuery(transcript);
-        executeSearch(transcript);
-      };
-      recognitionRef.current = recognition;
+  useEffect(() => {
+    if (currentSessionId && messages.length > 0) {
+      setRecentSearches(prev => prev.map(s =>
+        s.id === currentSessionId ? { ...s, messages: messages } : s
+      ));
     }
-  }, []);
+  }, [messages, currentSessionId]);
+
+  const handleNewChat = () => {
+    setCurrentSessionId(null);
+    setMessages([]);
+    setQuery('');
+  };
+
+  const handleHistoryClick = (session) => {
+    setCurrentSessionId(session.id);
+    setMessages(session.messages || []);
+    setQuery('');
+  };
+
+  const handleDeleteHistory = (e, id) => {
+    e.stopPropagation();
+    if (window.confirm('이 검색 기록을 삭제할까요?')) {
+      setRecentSearches(prev => prev.filter(item => item.id !== id));
+      if (currentSessionId === id) handleNewChat();
+    }
+  };
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (loginInput.id && loginInput.pw) {
+      setUser({ name: loginInput.id, role: 'Administrator' });
+      setIsLoggedIn(true);
+      setShowLoginModal(false);
+      setLoginInput({ id: '', pw: '' });
+    }
+  };
+
+  const executeLogout = () => {
+    setIsLoggedIn(false);
+    setUser({ name: '방문객', role: 'Guest' });
+    setShowLogoutModal(false);
+  };
 
   const startListening = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
-    } else {
-      // 말하기 중단
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-      recognitionRef.current?.start();
+    if (!('webkitSpeechRecognition' in window)) return;
+    const recognition = new window.webkitSpeechRecognition();
+    recognition.lang = 'ko-KR';
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setQuery(transcript);
+      handleSearch(transcript);
+    };
+    recognition.start();
+  };
+
+  const handleSearch = async (text = query) => {
+    if (!text || !text.trim()) return;
+    let sessionId = currentSessionId;
+    if (!sessionId) {
+      sessionId = Date.now();
+      setRecentSearches(prev => [{ id: sessionId, title: text, messages: [], location: '실시간 관제', date: new Date().toLocaleDateString(), user: user.name }, ...prev]);
+      setCurrentSessionId(sessionId);
     }
-  };
-
-  // 음성 출력 (TTS)
-  const speak = (text) => {
-    if (!window.speechSynthesis || !text) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'ko-KR';
-    utterance.rate = 1.0;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const handleSearch = (e) => {
-    if (e) e.preventDefault();
-    executeSearch(query);
-  };
-
-  const executeSearch = async (searchQuery) => {
-    if (!searchQuery.trim()) return;
-
+    setMessages(prev => [...prev, { type: 'user', text }]);
+    setQuery('');
     setLoading(true);
-    setError(null);
     try {
-      const response = await axios.post('http://localhost:8000/api/search', { query: searchQuery });
-      const data = response.data;
-      setResult(data);
-      
-      // 결과 수신 시 자동으로 AI 보고서 또는 답변 읽어주기
-      if (data.ai_report) {
-        speak(data.ai_report);
-      } else if (data.answer) {
-        speak(data.answer);
-      }
-    } catch (err) {
-      console.error(err);
-      setError("서버와의 통신 중 오류가 발생했습니다.");
+      const res = await fetch('http://localhost:8000/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: text, top_k: 4 }),
+      });
+      const data = await res.json();
+      setMessages(prev => [...prev, { type: 'ai', report: data.ai_report || data.answer || "보안 관련 질문을 입력해 주세요.", results: data.results || [], intent: data.intent_info?.intent || "OOD" }]);
+    } catch (error) {
+      setMessages(prev => [...prev, { type: 'ai', report: "서버 연결 오류가 발생했습니다.", intent: "ERROR" }]);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0b] text-slate-100 p-6 md:p-12 selection:bg-blue-500/30">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <header className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <motion.div 
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-2"
-          >
-            <div className="flex items-center gap-2 text-blue-500 font-bold tracking-tight">
-              <Sparkles size={20} />
-              <span>AI CCTV ANALYTICS</span>
-            </div>
-            <h1 className="text-4xl md:text-5xl font-black tracking-tighter">
-              Search<span className="text-blue-500">Light</span>
-            </h1>
-            <p className="text-slate-400 font-medium">자연어 질의를 통한 CCTV 지능형 의미 검색 시스템</p>
-          </motion.div>
+    <div className="app-container">
+      <aside className="sidebar">
+        <button className="new-chat-btn" onClick={handleNewChat}><Plus size={18} /><span>새 채팅</span></button>
+        <div className="search-box"><Search className="search-icon" size={14} /><input type="text" placeholder="분실물 검색..." /></div>
+        <div className="history-section">
+          <div className="history-title"><Clock size={12} /><span>최근 검색 기록</span></div>
+          <div className="history-section-container" style={{ maxHeight: 'calc(100vh - 250px)', overflowY: 'auto' }}>
+            {recentSearches.map(item => (
+              <div key={item.id} className={`history-item group ${currentSessionId === item.id ? 'active' : ''}`} onClick={() => handleHistoryClick(item)} style={{ backgroundColor: currentSessionId === item.id ? '#1f2937' : 'transparent', position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ flex: 1, overflow: 'hidden' }}><div className="item-title" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: '20px' }}>{item.title}</div><div className="item-info">{item.location} • {item.date}</div></div>
+                <X size={14} className="delete-btn" onClick={(e) => handleDeleteHistory(e, item.id)} style={{ color: '#6b7280', cursor: 'pointer', position: 'absolute', right: '10px', opacity: '0.4' }} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="user-profile" onClick={isLoggedIn ? () => setShowLogoutModal(true) : () => setShowLoginModal(true)} style={{ cursor: 'pointer' }}>
+          <div className="avatar" style={{ backgroundColor: isLoggedIn ? '#3b82f6' : '#6b7280' }}>{user.name[0]}</div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: '13px', fontWeight: '600' }}>{user.name}</div><div style={{ fontSize: '10px', color: '#6b7280' }}>{isLoggedIn ? user.role : '로그인 필요'}</div></div>
+          {isLoggedIn ? <MoreVertical size={16} /> : <LogIn size={16} />}
+        </div>
+      </aside>
 
-          <div className="flex gap-4">
-            <div className="glass-card px-4 py-2 rounded-2xl flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-sm font-semibold text-slate-300">System Online</span>
-            </div>
+      <main className="main-content">
+        <header className="header">
+          <div className="header-logo">Searchlight <MoreVertical size={14} /></div>
+          <div style={{ display: 'flex', gap: '20px', color: '#9ca3af' }}>
+            <User size={18} cursor="pointer" onClick={isLoggedIn ? () => setShowLogoutModal(true) : () => setShowLoginModal(true)} style={{ color: isLoggedIn ? '#3b82f6' : '#9ca3af' }} />
+            <Settings size={18} cursor="pointer" />
           </div>
         </header>
 
-        {/* Search Bar */}
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="relative mb-12"
-        >
-          <form onSubmit={handleSearch} className="group">
-            <input 
-              type="text" 
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="무엇을 찾아드릴까요? (예: 빨간 옷 입은 사람 찾아줘)"
-              className="w-full bg-[#161618] border border-white/5 rounded-3xl px-8 py-6 text-xl outline-none focus:border-blue-500/50 transition-all placeholder:text-slate-600 pr-48 shadow-2xl"
-            />
-            <div className="absolute right-3 top-3 bottom-3 flex gap-2">
-              <button
-                type="button"
-                onClick={startListening}
-                className={`w-14 rounded-2xl flex items-center justify-center transition-all ${
-                  isListening ? 'bg-red-500 mic-pulse' : 'bg-white/5 hover:bg-white/10 text-slate-400'
-                }`}
-              >
-                {isListening ? <Square size={20} fill="currentColor" /> : <Mic size={20} />}
-              </button>
-              <button 
-                type="submit"
-                disabled={loading}
-                className="px-8 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 rounded-2xl flex items-center gap-2 font-bold transition-all"
-              >
-                {loading ? <Loader2 className="animate-spin" /> : <Search size={20} />}
-                <span>검색</span>
-              </button>
+        <div className="chat-container" style={{ flex: 1, overflowY: 'auto', padding: '40px' }}>
+          {messages.length === 0 ? (
+            <div className="welcome-screen" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <h1 className="welcome-title" style={{ fontSize: '28px', textAlign: 'center', lineHeight: '1.5', fontWeight: '300' }}>Searchlight AI가 실시간 감시 중입니다.<br />분석이 필요한 내용을 입력하세요.</h1>
             </div>
-          </form>
-
-          {/* Voice Feedback Overlay */}
-          <AnimatePresence>
-            {(isListening || isSpeaking) && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                className="absolute -bottom-16 left-1/2 -translate-x-1/2 flex items-center gap-4 px-6 py-3 glass-card rounded-2xl border-blue-500/30"
-              >
-                <div className="flex items-center gap-1 h-6">
-                  {[...Array(8)].map((_, i) => (
-                    <div key={i} className="waveform-bar" style={{ animationDelay: `${i * 0.1}s` }} />
-                  ))}
-                </div>
-                <span className="text-sm font-bold text-blue-400">
-                  {isListening ? "말씀해 주세요..." : "AI가 설명하는 중입니다..."}
-                </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.div>
-
-        {/* Content Area */}
-        <AnimatePresence mode="wait">
-          {loading ? (
-            <motion.div 
-              key="loading"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex flex-col items-center justify-center py-24 gap-4"
-            >
-              <div className="relative ai-glow">
-                <div className="p-8 bg-blue-600/20 rounded-full">
-                  <Loader2 size={48} className="text-blue-500 animate-spin" />
-                </div>
-                <div className="absolute inset-0 bg-blue-500 blur-3xl opacity-20 animate-pulse" />
-              </div>
-              <p className="text-slate-200 font-bold text-lg animate-pulse">AI가 실시간 CCTV 데이터를 분석하고 있습니다...</p>
-              <p className="text-slate-500 text-sm">잠시만 기다려 주세요.</p>
-            </motion.div>
-          ) : result ? (
-            <motion.div 
-              key="results"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="space-y-8"
-            >
-              {/* Intent & AI Report Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1 flex items-center gap-4 p-6 glass-card rounded-3xl">
-                  {result.intent_info && (
-                    <>
-                      <div className={`p-4 rounded-2xl ${INTENT_ICONS[result.intent_info.intent]?.bg || 'bg-slate-400/10'}`}>
-                        {(() => {
-                          const Icon = INTENT_ICONS[result.intent_info.intent]?.icon || MessageSquare;
-                          return <Icon className={INTENT_ICONS[result.intent_info.intent]?.color || 'text-slate-400'} size={28} />;
-                        })()}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Detected Intent</span>
-                          <span className="text-[10px] bg-white/5 px-2 py-0.5 rounded-full text-slate-400">Confidence {Math.round(result.intent_info.confidence * 100)}%</span>
+          ) : (
+            <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+              {messages.map((msg, i) => (
+                <div key={i} style={{ marginBottom: '30px', display: 'flex', flexDirection: 'column', alignItems: msg.type === 'user' ? 'flex-end' : 'flex-start' }}>
+                  {msg.type === 'user' ? (
+                    <div style={{ backgroundColor: '#3b82f6', padding: '12px 20px', borderRadius: '15px 15px 0 15px', maxWidth: '80%', fontSize: '14px' }}>{msg.text}</div>
+                  ) : (
+                    <div style={{ width: '100%', backgroundColor: msg.intent === 'ERROR' ? '#450a0a' : '#1a2235', padding: '25px', borderRadius: '15px', border: msg.intent === 'ERROR' ? '1px solid #ef4444' : '1px solid rgba(255,255,255,0.1)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px', color: msg.intent === 'ERROR' ? '#f87171' : '#3b82f6', fontSize: '13px', fontWeight: 'bold' }}>{msg.intent === 'ERROR' ? <AlertCircle size={16} /> : <Shield size={16} />} {msg.intent === 'ERROR' ? "시스템 오류" : "AI 분석 보고서"}<span style={{ flex: 1 }}></span><span style={{ fontSize: '10px', color: '#6b7280' }}>{msg.intent}</span></div>
+                      <p style={{ fontSize: '14px', lineHeight: '1.6', color: '#d1d5db' }}>{msg.report}</p>
+                      {msg.results?.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '15px', marginTop: '20px' }}>
+                          {msg.results.map((res, j) => (
+                            <div key={j} style={{ backgroundColor: '#0b0f19', borderRadius: '10px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)' }}>
+                              <video src={`http://localhost:8000${res.video_url}`} style={{ width: '100%', height: '120px', objectFit: 'cover' }} controls preload="metadata" /><div style={{ padding: '10px' }}><div style={{ fontSize: '10px', color: '#3b82f6', display: 'flex', justifyContent: 'space-between' }}><span>{res.timestamp}</span><span>{(res.score * 100).toFixed(0)}%</span></div><div style={{ fontSize: '11px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{res.description}</div></div>
+                            </div>
+                          ))}
                         </div>
-                        <h2 className="text-2xl font-bold">
-                          <span className={INTENT_ICONS[result.intent_info.intent]?.color}>{INTENT_ICONS[result.intent_info.intent]?.label || result.intent_info.intent}</span>
-                        </h2>
-                      </div>
-                    </>
+                      )}
+                    </div>
                   )}
                 </div>
-
-                {/* AI Report Card */}
-                {(result.ai_report || result.answer) && (
-                  <div className="lg:col-span-2 p-6 glass-card rounded-3xl border-blue-500/20 relative overflow-hidden group">
-                    <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                      <Volume2 size={80} className="text-blue-500" />
-                    </div>
-                    <div className="flex items-center gap-2 mb-4">
-                      <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                      <span className="text-xs font-bold text-blue-500 uppercase tracking-widest">AI Security Report</span>
-                    </div>
-                    <div className="text-lg text-slate-200 leading-relaxed font-medium">
-                      {result.ai_report || result.answer}
-                    </div>
-                    {isSpeaking && (
-                      <div className="mt-4 flex items-center gap-2">
-                        <div className="waveform-bar" style={{ animationDelay: '0s' }} />
-                        <div className="waveform-bar" style={{ animationDelay: '0.2s' }} />
-                        <div className="waveform-bar" style={{ animationDelay: '0.4s' }} />
-                        <span className="text-xs text-blue-400 font-bold">음성 안내 중...</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Grid Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {result.status === "success" && result.results.length > 0 ? (
-                  result.results.map((item, idx) => (
-                    <motion.div 
-                      key={idx}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: idx * 0.1 }}
-                      className="group glass-card rounded-[32px] overflow-hidden flex flex-col border border-white/5 hover:border-blue-500/30 transition-all"
-                    >
-                      <div className="relative aspect-video bg-slate-900 overflow-hidden">
-                        {item.image_path ? (
-                          <img 
-                            src={item.image_path} 
-                            alt={item.description}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center text-slate-700 gap-2">
-                            <Camera size={48} />
-                            <span className="text-sm font-medium">No Image Preview</span>
-                          </div>
-                        )}
-                        <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10">
-                          Rank #{item.rank}
-                        </div>
-                        <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-[#0a0a0b] to-transparent" />
-                      </div>
-                      <div className="p-6 pt-2">
-                        <div className="flex items-center gap-2 mb-3">
-                          <History size={14} className="text-blue-500" />
-                          <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Similarity Match: {Math.round((1 - item.distance) * 100)}%</span>
-                        </div>
-                        <p className="text-lg font-bold text-slate-200 leading-snug group-hover:text-white transition-colors">
-                          {item.description}
-                        </p>
-                      </div>
-                    </motion.div>
-                  ))
-                ) : result.status === "blocked" ? (
-                  <div className="col-span-full p-12 glass-card rounded-[32px] flex flex-col items-center text-center gap-4">
-                    <div className="p-6 bg-yellow-400/10 rounded-full text-yellow-400">
-                      <AlertTriangle size={48} />
-                    </div>
-                    <div className="space-y-2">
-                      <h3 className="text-2xl font-bold">요청이 제한되었습니다</h3>
-                      <p className="text-slate-400 max-w-md">{result.message}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="col-span-full py-24 text-center text-slate-500 italic">
-                    일치하는 결과가 없습니다. 다른 검색어를 입력해보세요.
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div 
-              key="empty"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex flex-col items-center justify-center py-24 text-center gap-6"
-            >
-              <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center text-slate-700 border border-white/5">
-                <Search size={48} />
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-xl font-bold text-slate-300">검색을 시작하세요</h3>
-                <p className="text-slate-500 max-w-xs mx-auto">상황, 인상착의, 특정 이벤트 등을 자연스럽게 입력하여 검색할 수 있습니다.</p>
-              </div>
-            </motion.div>
+              ))}
+              {loading && <div style={{ color: '#3b82f6', fontSize: '12px', fontStyle: 'italic' }}>AI 분석 중...</div>}<div ref={chatEndRef} />
+            </div>
           )}
-        </AnimatePresence>
-      </div>
+        </div>
+
+        <div className="input-area"><div className="input-container" style={{ padding: '20px 40px 40px' }}><div className="input-wrapper">
+          <Plus size={20} style={{ color: '#6b7280', cursor: 'pointer' }} /><input type="text" placeholder="질문을 입력하세요..." value={query} onChange={(e) => setQuery(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSearch()} /><Mic size={20} className="icon-btn" onClick={startListening} style={{ color: isListening ? '#3b82f6' : '#6b7280' }} /><button className="icon-btn send-btn" onClick={() => handleSearch()} style={{ marginLeft: '10px' }}><Send size={18} /></button>
+        </div></div></div>
+      </main>
+
+      {/* Login Modal */}
+      {showLoginModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="modal-content" style={{ backgroundColor: '#111827', padding: '40px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', width: '350px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}><div style={{ padding: '15px', backgroundColor: '#3b82f6', borderRadius: '15px' }}><Lock size={32} /></div></div>
+            <h2 style={{ textAlign: 'center', marginBottom: '10px', fontSize: '20px' }}>시스템 관리자 인증</h2>
+            <p style={{ textAlign: 'center', color: '#6b7280', fontSize: '12px', marginBottom: '30px' }}>계정 정보를 입력해 주세요.</p>
+            <form onSubmit={handleLogin}>
+              <div style={{ marginBottom: '15px' }}><label style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '5px', display: 'block' }}>ID</label><input type="text" required value={loginInput.id} onChange={(e) => setLoginInput({ ...loginInput, id: e.target.value })} style={{ width: '100%', backgroundColor: '#1f2937', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px', color: 'white' }} placeholder="관리자 아이디" /></div>
+              <div style={{ marginBottom: '30px' }}><label style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '5px', display: 'block' }}>PASSWORD</label><input type="password" required value={loginInput.pw} onChange={(e) => setLoginInput({ ...loginInput, pw: e.target.value })} style={{ width: '100%', backgroundColor: '#1f2937', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px', color: 'white' }} placeholder="••••••••" /></div>
+              <button type="submit" style={{ width: '100%', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '10px', padding: '14px', fontWeight: 'bold', cursor: 'pointer' }}>인증 및 로그인</button>
+              <button type="button" onClick={() => setShowLoginModal(false)} style={{ width: '100%', background: 'transparent', color: '#6b7280', border: 'none', marginTop: '15px', fontSize: '12px', cursor: 'pointer' }}>닫기</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(5px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="modal-content" style={{ backgroundColor: '#111827', padding: '40px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.1)', width: '350px', textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}><div style={{ padding: '15px', backgroundColor: '#ef4444', borderRadius: '15px' }}><LogOut size={32} /></div></div>
+            <h2 style={{ marginBottom: '10px', fontSize: '20px' }}>로그아웃</h2>
+            <p style={{ color: '#6b7280', fontSize: '12px', marginBottom: '30px' }}>정말 시스템에서 로그아웃 하시겠습니까?</p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={executeLogout} style={{ flex: 1, backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '10px', padding: '14px', fontWeight: 'bold', cursor: 'pointer' }}>로그아웃</button>
+              <button onClick={() => setShowLogoutModal(false)} style={{ flex: 1, backgroundColor: '#1f2937', color: 'white', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '14px', fontWeight: 'bold', cursor: 'pointer' }}>취소</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        .chat-container::-webkit-scrollbar { width: 6px; }
+        .chat-container::-webkit-scrollbar-track { background: transparent; }
+        .chat-container::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+        .history-section-container::-webkit-scrollbar { display: none; }
+        .history-section-container { -ms-overflow-style: none; scrollbar-width: none; }
+        .history-item.active { border-left: 3px solid #3b82f6; }
+        .delete-btn:hover { color: #ef4444 !important; opacity: 1 !important; transform: scale(1.2); transition: all 0.2s; }
+      `}</style>
     </div>
   );
-}
+};
 
 export default App;
