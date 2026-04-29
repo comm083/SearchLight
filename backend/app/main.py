@@ -212,7 +212,8 @@ async def process_user_query(request: SearchRequest):
                 query=query_text, 
                 contexts=search_results,
                 intent=current_intent,
-                is_fallback=is_fallback
+                is_fallback=is_fallback,
+                requested_time=time_info.get("raw", "전체 시간")
             )
             response_data["ai_report"] = ai_report
         else:
@@ -230,10 +231,22 @@ async def process_user_query(request: SearchRequest):
     db_service.log_search(
         query=query_text, 
         intent=current_intent, 
+        session_id=session_id,
         ai_report=response_data.get("ai_report") or response_data.get("answer")
     )
 
     return response_data
+
+@app.get("/api/history/{session_id}")
+async def get_history(session_id: str):
+    """
+    사용자의 이전 검색 기록을 가져옵니다.
+    """
+    history = db_service.get_search_history(session_id)
+    return {
+        "status": "success",
+        "history": history
+    }
 
 # 🚨 [신규] 실시간 이상 행동 시뮬레이션 엔드포인트
 @app.post("/api/alerts/simulate")
