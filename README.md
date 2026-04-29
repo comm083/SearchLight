@@ -222,3 +222,28 @@ python ai/intent_classifier/train.py
     - **내용**: 현재 70장의 이미지를 다양한 시간대(눈, 비, 야간), 다양한 각도로 확장하여 검색의 정밀도 및 풍부함 보완
 - [x] **8. JSON 데이터를 Supabase Vector DB로 이관 (Cloud Native RAG)**
     - **내용**: 로컬 JSON 파일과 FAISS 인덱스를 Supabase의 pgvector로 이관하여 클라우드 기반의 통합 데이터 관리 체계 구축
+
+---
+
+## 🔍 시스템 고증 및 고도화 체크리스트 (Fixing Contextual Inconsistencies)
+
+실제 보안 관제 현장의 현실성을 반영하기 위한 고도화 작업 목록입니다.
+
+- [x] **1. "지금" 시간 범위의 현실화**
+    - **내용**: `±5분` 범위를 `현재 시각 - 1분 ~ 현재 시각`으로 조정하여 미래 시간 검색을 배제하고 실시간성을 강화합니다.
+    - **파일**: `backend/app/services/korean_time_parser.py`
+- [x] **2. 실시간 위치(Localization) 처리 로직 고도화**
+    - **내용**: `LOCALIZATION` 의도의 경우 벡터 검색(RAG) 대신 SQLite/Supabase의 최신 상태 로그를 직접 조회하여 정확한 위치를 반환합니다.
+    - **파일**: `backend/app/main.py`, `backend/app/services/database.py`
+- [x] **3. 대화 맥락 내 인물/객체 특징(Feature) 유지**
+    - **내용**: "빨간 옷 입은 사람"과 같은 외형 특징을 대화 메모리에 저장하고, 이어지는 지칭어("그 사람") 질의 시 검색 쿼리에 자동으로 포함합니다.
+    - **파일**: `backend/app/main.py`, `SESSION_MEMORY` 구조 개선
+- [x] **4. 주관적 시간 표현("아까" 등)의 유연성 확보**
+    - **내용**: "아까"를 고정된 1시간이 아닌, 가장 최근에 발생했던 유의미한 이벤트 시점으로 동적 할당하거나 범위를 최적화합니다.
+    - **파일**: `backend/app/services/korean_time_parser.py`
+- [x] **5. 보안 도메인 특화 시간대 경계 재정의**
+    - **내용**: 야간(Sunset to Sunrise), 교대 시간 등 보안 현장에서의 실제 시간 개념을 반영하여 파싱 로직을 정교화합니다.
+    - **파일**: `backend/app/services/korean_time_parser.py`
+- [ ] **6. 검색 결과의 정밀도 향상 (Filtering Irrelevant Results)**
+    - **내용**: 질문과 관련 없는 영상이나 분석 결과가 포함되지 않도록 검색 임계값(Threshold) 조정 및 필터링 로직을 강화합니다.
+    - **일정**: 내일(2026-04-29) 해결 예정

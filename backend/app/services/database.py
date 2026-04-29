@@ -16,7 +16,7 @@ class SupabaseService:
         self.supabase: Client = create_client(url, key)
         print("[Service] Supabase 클라우드 DB 연동 완료!")
 
-    def log_search(self, query: str, intent: str, ai_report: str = None):
+    def log_search(self, query: str, intent: str, session_id: str = "default", ai_report: str = None):
         if not self.supabase:
             print(f"[Mock DB] 로그 기록 (DB 연결 없음): {query} / {intent}")
             return
@@ -24,7 +24,8 @@ class SupabaseService:
             # Supabase 'search_logs' 테이블에 데이터 전송
             data = {
                 "query": query,
-                "intent": intent
+                "intent": intent,
+                "session_id": session_id
             }
             if ai_report:
                 data["ai_report"] = ai_report
@@ -32,6 +33,22 @@ class SupabaseService:
             response = self.supabase.table('search_logs').insert(data).execute()
         except Exception as e:
             print(f"[Supabase Error] 로그 저장 실패: {e}")
+
+    def get_search_history(self, session_id: str = "default", limit: int = 20):
+        """
+        특정 세션의 과거 검색 기록을 가져옵니다.
+        """
+        try:
+            response = self.supabase.table('search_logs') \
+                .select("*") \
+                .eq("session_id", session_id) \
+                .order("created_at", desc=True) \
+                .limit(limit) \
+                .execute()
+            return response.data
+        except Exception as e:
+            print(f"[Supabase Error] 히스토리 조회 실패: {e}")
+            return []
 
     def save_alert(self, alert_data: dict):
         """
@@ -46,6 +63,32 @@ class SupabaseService:
         except Exception as e:
             # 테이블이 없거나 권한 문제일 수 있으므로 에러 메시지 출력
             print(f"[Supabase Error] 알림 저장 실패: {e}")
+
+    def get_latest_status(self, location: str = None):
+        """
+        특정 구역 또는 전체 구역의 가장 최신 보안 이벤트를 가져옵니다. (Localization 용)
+        """
+        try:
+            query = self.supabase.table('cctv_vectors').select('content, metadata').order('metadata->timestamp', desc=True).limit(1)
+            
+            if location:
+                # location 필터링 (metadata 내의 location 필드 기준)
+                # Supabase에서는 json 필터링이 가능함
+                query = query.filter('metadata->>location', 'eq', location)
+            
+            response = query.execute()
+            if response.data:
+                item = response.data[0]
+                return {
+                    "description": item['content'],
+                    "timestamp": item['metadata'].get('timestamp'),
+                    "location": item['metadata'].get('location'),
+                    "image_path": item['metadata'].get('image_path')
+                }
+            return None
+        except Exception as e:
+            print(f"[Supabase Error] 최신 상태 조회 실패: {e}")
+            return None
 
 # 싱글톤 패턴 (서버 내에서 한 번만 생성되도록)
 db_service = SupabaseService()

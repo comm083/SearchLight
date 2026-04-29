@@ -195,6 +195,7 @@ body {
   background-color: #2563eb;
 }
 
+/* Mic Button Special Styles */
 .mic-btn {
   background-color: #374151;
   color: #9ca3af;
@@ -206,6 +207,7 @@ body {
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: none;
 }
 
 .mic-btn:hover {
@@ -226,30 +228,7 @@ body {
   100% { transform: scale(1); }
 }
 
-
-/* Profiles */
-.user-profile {
-  margin-top: auto;
-  padding-top: 20px;
-  border-top: 1px solid rgba(255,255,255,0.1);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.avatar {
-  width: 32px;
-  height: 32px;
-  background-color: #8b5cf6;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: bold;
-}
-
-/* Voice Indicator & Waveform Styles */
+/* Voice Indicator & Waveform */
 .voice-indicator {
   position: absolute;
   top: -30px;
@@ -288,3 +267,36 @@ body {
   50% { height: 100%; }
 }
 
+/* Result Cards */
+.result-card {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+
+.result-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+  border-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+/* Profiles */
+.user-profile {
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  background-color: #8b5cf6;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+}

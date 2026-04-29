@@ -12,16 +12,16 @@ def evaluate_current_model():
     # 1. 평가용 테스트 데이터 (정답 라벨 포함)
     # 실제 환경에서 자주 쓰일 법한 발화 10개를 선정
     test_data = [
-        {"text": "빨간 옷 입은 사람 찾아줘", "expected": "SEARCH"},
-        {"text": "어제 밤 주차장 화면 보여줘", "expected": "SEARCH"},
-        {"text": "정문 카메라 1번 확인해볼래?", "expected": "SEARCH"},
-        {"text": "불난 것 같아 빨리 확인해!", "expected": "EMERGENCY"},
-        {"text": "CCTV에 쓰러진 사람이 있어요", "expected": "EMERGENCY"},
-        {"text": "후문 카메라 연결이 끊겼어", "expected": "ERROR"},
-        {"text": "화면이 너무 어두워서 안보여", "expected": "ERROR"},
-        {"text": "검은색 세단 지나갔어?", "expected": "SEARCH"},
-        {"text": "오늘 날씨 어때?", "expected": "GENERAL"},
-        {"text": "수고 많으십니다", "expected": "GENERAL"}
+        {"text": "빨간 옷 입은 사람 총 몇 명이야?", "expected": "COUNTING"},
+        {"text": "어제 오후에 무슨 일 있었어?", "expected": "SUMMARIZATION"},
+        {"text": "지금 주차장에 차 있어?", "expected": "LOCALIZATION"},
+        {"text": "수상한 사람 없었어?", "expected": "BEHAVIORAL"},
+        {"text": "왜 30분 전에 알람이 울렸어?", "expected": "CAUSAL"},
+        {"text": "오늘 오전 상황 요약해줘", "expected": "SUMMARIZATION"},
+        {"text": "현재 로비에 인원 몇 명인지 세어봐", "expected": "COUNTING"},
+        {"text": "담 넘으려는 사람 감지됐어?", "expected": "BEHAVIORAL"},
+        {"text": "그 사고 어떻게 발생한 거야?", "expected": "CAUSAL"},
+        {"text": "안녕 반가워", "expected": "CHITCHAT"}
     ]
     
     correct_count = 0
@@ -36,7 +36,7 @@ def evaluate_current_model():
         
         # 현재 모델로 예측
         result = intent_service.classify(text)
-        predicted = result["intent"]
+        predicted = result.intent
         
         is_correct = (expected == predicted)
         if is_correct:

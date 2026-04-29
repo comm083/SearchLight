@@ -52,17 +52,20 @@ AMPM_OFFSET = {
 }
 
 DOMAIN_DICT = {
-    "교대 시간":  [("07:50", "08:10"), ("17:50", "18:10")],
-    "교대시간":   [("07:50", "08:10"), ("17:50", "18:10")],
-    "점심시간":   [("12:00", "13:30")],
-    "점심때":     [("12:00", "13:30")],
+    "교대 시간":  [("07:50", "08:20"), ("19:50", "20:20")],
+    "교대시간":   [("07:50", "08:20"), ("19:50", "20:20")],
+    "점심시간":   [("11:30", "13:30")],
+    "점심때":     [("11:30", "13:30")],
     "점심":       [("12:00", "13:00")],
-    "저녁때":     [("18:00", "19:30")],
-    "새벽":       [("00:00", "06:00")],
-    "야간":       [("22:00", "23:59"), ("00:00", "06:00")],
+    "낮":         [("10:00", "17:00")],
+    "저녁때":     [("17:00", "21:00")],
+    "저녁":       [("17:00", "21:00")],
+    "밤":         [("21:00", "23:59"), ("00:00", "06:00")],
+    "야간":       [("20:00", "06:00")],
+    "새벽":       [("00:00", "05:00")],
     "업무시간":   [("09:00", "18:00")],
-    "퇴근시간":   [("17:30", "19:00")],
-    "출근시간":   [("07:30", "09:30")],
+    "퇴근시간":   [("18:00", "19:30")],
+    "출근시간":   [("07:00", "09:00")],
     "방금":       None,
     "아까":       None,
     "지금":       None,
@@ -106,14 +109,16 @@ class KoreanTimeParser:
                 continue
             if ranges is None:            # 방금/아까/지금
                 if kw == "방금":
-                    return TimeRange(self.now - timedelta(minutes=5),
-                                     self.now, 0.95, "domain:방금", q)
+                    return TimeRange(self.now - timedelta(minutes=2),
+                                     self.now, 0.98, "domain:방금", q)
                 if kw == "아까":
-                    return TimeRange(self.now - timedelta(minutes=60),
+                    # '아까'는 관제 문맥상 최근 2시간 이내의 이벤트를 의미하도록 확장
+                    return TimeRange(self.now - timedelta(hours=2),
                                      self.now, 0.85, "domain:아까", q)
-                if kw == "지금":
-                    return TimeRange(self.now - timedelta(minutes=5),
-                                     self.now + timedelta(minutes=5),
+                if kw == "지금" or kw == "현재":
+                    # 미래 시간 검색을 배제하기 위해 현재 시각을 상한선으로 1분 범위 설정
+                    return TimeRange(self.now - timedelta(minutes=1),
+                                     self.now,
                                      0.99, "domain:지금", q)
                 continue
 
@@ -220,11 +225,9 @@ class KoreanTimeParser:
     # ── 날짜 전용 ────────────────────────────────────────────────────
     def _date_only(self, q: str) -> Optional[TimeRange]:
         d = self._base_date(q)
-        # 날짜 관련 키워드가 없으면 None
-        if not any(kw in q for kw in (
-            "어제", "오늘", "내일", "그저께", "그제",
-            "지난주", "저번 주", "지지난주", "이번 주"
-        )):
+        # 날짜 관련 키워드나 'X월' 패턴이 없으면 None
+        date_keywords = ("어제", "오늘", "내일", "그저께", "그제", "지난주", "저번 주", "지지난주", "이번 주")
+        if not any(kw in q for kw in date_keywords) and not re.search(r'\d+\s*월', q):
             return None
         start = datetime.combine(d, time(0, 0))
         end   = datetime.combine(d, time(23, 59))
@@ -233,6 +236,18 @@ class KoreanTimeParser:
     # ─── 헬퍼 ────────────────────────────────────────────────────────
     def _base_date(self, q: str):
         today = self.now.date()
+        
+        # "X월 Y일" 또는 "X월" 패턴 처리
+        m_date = re.search(r'(\d+)\s*월\s*(?:(\d+)\s*일)?', q)
+        if m_date:
+            month = int(m_date.group(1))
+            day = int(m_date.group(2)) if m_date.group(2) else 1
+            # 연도는 현재 연도 사용 (미래 월이면 작년으로 처리하는 로직 등은 생략하고 단순화)
+            try:
+                return today.replace(month=month, day=day)
+            except ValueError:
+                return today
+
         if "그저께" in q or "그제" in q: return today + timedelta(days=-2)
         if "어제" in q:                  return today + timedelta(days=-1)
         if "내일" in q:                  return today + timedelta(days=1)
@@ -320,8 +335,11 @@ class KoreanTimeParser:
     def _str_to_dt(date, s: str, e: str):
         sh, sm = map(int, s.split(":"))
         eh, em = map(int, e.split(":"))
-        return (datetime.combine(date, time(sh, sm)),
-                datetime.combine(date, time(eh, em)))
+        start = datetime.combine(date, time(sh, sm))
+        end = datetime.combine(date, time(eh, em))
+        if end < start:
+            end += timedelta(days=1)
+        return (start, end)
 
 
 # ─── 테스트 ──────────────────────────────────────────────────────────
