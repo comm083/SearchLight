@@ -105,6 +105,13 @@ async def process_user_query(request: SearchRequest):
     # 3. 시간 표현 파싱 (새로운 파서 사용)
     parsed_time = time_parser.parse(query_text)
     
+    # 응답 모드 결정 (시간 범위가 1시간 이내면 flash, 아니면 summary)
+    response_mode = "summary"
+    if parsed_time:
+        duration = (parsed_time.end - parsed_time.start).total_seconds()
+        if 0 < duration <= 3600: # 1시간 이내
+            response_mode = "flash"
+            
     if not parsed_time and has_pronoun and "last_time" in memory:
         time_info = memory["last_time"]
         context_used = True
@@ -213,7 +220,8 @@ async def process_user_query(request: SearchRequest):
                 contexts=search_results,
                 intent=current_intent,
                 is_fallback=is_fallback,
-                requested_time=time_info.get("raw", "전체 시간")
+                requested_time=time_info.get("raw", "전체 시간"),
+                mode=response_data.get("response_mode", "summary")
             )
             response_data["ai_report"] = ai_report
         else:

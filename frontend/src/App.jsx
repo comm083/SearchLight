@@ -34,7 +34,19 @@ const App = () => {
 
   const chatEndRef = useRef(null);
 
+  // [Persistence] 앱 로드 시 localStorage에서 로그인 상태 복구
   useEffect(() => {
+    const savedUser = localStorage.getItem('searchlight_user');
+    if (savedUser) {
+      const parsedUser = JSON.parse(savedUser);
+      setUser(parsedUser);
+      setIsLoggedIn(true);
+      console.log(`[Auth] 이전 세션 복구 완료: ${parsedUser.name}`);
+    }
+  }, []);
+
+  useEffect(() => {
+
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -109,10 +121,15 @@ const App = () => {
   const handleLogin = (e) => {
     e.preventDefault();
     if (loginInput.id && loginInput.pw) {
-      setUser({ name: loginInput.id, role: 'Administrator' });
+      const newUser = { name: loginInput.id, role: 'Administrator' };
+      setUser(newUser);
       setIsLoggedIn(true);
       setShowLoginModal(false);
       setLoginInput({ id: '', pw: '' });
+      
+      // [Persistence] 로그인 정보 저장
+      localStorage.setItem('searchlight_user', JSON.stringify(newUser));
+      console.log(`[Auth] 로그인 성공: ${newUser.name}`);
     }
   };
 
@@ -120,6 +137,10 @@ const App = () => {
     setIsLoggedIn(false);
     setUser({ name: '방문객', role: 'Guest' });
     setShowLogoutModal(false);
+    
+    // [Persistence] 로그인 정보 제거
+    localStorage.removeItem('searchlight_user');
+    console.log("[Auth] 로그아웃 완료");
   };
 
   const startListening = () => {
@@ -159,7 +180,14 @@ const App = () => {
         }),
       });
       const data = await res.json();
-      setMessages(prev => [...prev, { type: 'ai', report: data.ai_report || data.answer || "보안 관련 질문을 입력해 주세요.", results: data.results || [], intent: data.intent_info?.intent || "OOD" }]);
+      const aiMsg = { 
+        type: 'ai', 
+        report: data.ai_report || data.answer || "보안 관련 질문을 입력해 주세요.", 
+        results: data.results || [], 
+        intent: data.intent_info?.intent || "OOD",
+        mode: data.response_mode || "summary" // 'flash' 또는 'summary' 저장
+      };
+      setMessages(prev => [...prev, aiMsg]);
       
       // 검색 성공 후 히스토리 갱신
       fetchHistory();
@@ -242,7 +270,20 @@ const App = () => {
                     <div style={{width: '100%', backgroundColor: msg.intent === 'ERROR' ? '#450a0a' : '#1a2235', padding: '25px', borderRadius: '15px', border: msg.intent === 'ERROR' ? '1px solid #ef4444' : '1px solid rgba(255,255,255,0.1)'}}>
                       <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px', color: msg.intent === 'ERROR' ? '#f87171' : '#3b82f6', fontSize: '13px', fontWeight: 'bold'}}>{msg.intent === 'ERROR' ? <AlertCircle size={16} /> : <Shield size={16} />} {msg.intent === 'ERROR' ? "시스템 오류" : "AI 분석 보고서"}<span style={{flex: 1}}></span><span style={{fontSize: '10px', color: '#6b7280'}}>{msg.intent}</span></div>
                       <div style={{fontSize: '14px', lineHeight: '1.7', color: '#d1d5db', whiteSpace: 'pre-wrap', backgroundColor: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)'}}>
-                        {msg.report}
+                        {msg.mode === 'flash' ? (
+                          /* ⚡ 특정 시점 전용 (Flash Mode) */
+                          <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
+                            <div style={{display: 'inline-flex', alignSelf: 'flex-start', padding: '2px 8px', backgroundColor: 'rgba(59,130,246,0.2)', color: '#60a5fa', borderRadius: '4px', fontSize: '10px', fontWeight: '800', border: '1px solid rgba(59,130,246,0.3)', marginBottom: '5px'}}>
+                              ⚡ 특정 시점 상황 분석
+                            </div>
+                            <div style={{fontSize: '15px', color: '#f3f4f6', fontWeight: '500'}}>
+                              {msg.report}
+                            </div>
+                          </div>
+                        ) : (
+                          /* 📊 광범위 시간대용 (Summary Mode) */
+                          msg.report
+                        )}
                       </div>
                       {msg.results?.length > 0 && (
                         <div style={{marginTop: '20px'}}>

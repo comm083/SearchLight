@@ -222,6 +222,89 @@ class RuleBasedIntentClassifier:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# 방식 B: KoELECTRA 파인튜닝 분류기 (실제 서비스용)
+# ─────────────────────────────────────────────────────────────────────
+class FineTunedIntentClassifier:
+    """
+    학습된 KoELECTRA 모델을 사용하여 의도를 분류합니다.
+    모델 로드 실패 시 RuleBasedIntentClassifier를 내부적으로 사용합니다.
+    """
+    def __init__(self, model_path: str = "model/koelectra_finetuned"):
+        self.model_path = model_path
+        self.labels = ["COUNTING", "SUMMARIZATION", "LOCALIZATION", "BEHAVIORAL", "CAUSAL"]
+        self.route_map = {
+            "COUNTING":      "sqlite_count",
+            "SUMMARIZATION": "vector_rag",
+            "LOCALIZATION":  "sqlite_latest",
+            "BEHAVIORAL":    "event_rag",
+            "CAUSAL":        "sqlite_and_rag",
+        }
+        self.fallback_clf = RuleBasedIntentClassifier()
+        self.model = None
+        self.tokenizer = None
+        
+        # 모델 로드 시도
+        try:
+            import torch
+            from transformers import AutoTokenizer, AutoModelForSequenceClassification
+            
+            # 절대 경로 확인
+            abs_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../", model_path))
+            if not os.path.exists(abs_path):
+                print(f"[Warning] 모델 경로를 찾을 수 없습니다: {abs_path}")
+                return
+
+            self.tokenizer = AutoTokenizer.from_pretrained(abs_path)
+            self.model = AutoModelForSequenceClassification.from_pretrained(abs_path)
+            self.model.eval()
+            print(f"[Service] KoELECTRA 파인튜닝 모델 로드 완료! ({model_path})")
+        except Exception as e:
+            print(f"[Warning] KoELECTRA 모델 로드 실패 (규칙 기반으로 대체): {e}")
+
+    def classify(self, query: str) -> IntentResult:
+        # 모델이 로드되지 않았으면 규칙 기반으로 수행
+        if self.model is None or self.tokenizer is None:
+            return self.fallback_clf.classify(query)
+
+        try:
+            import torch
+            inputs = self.tokenizer(query, return_tensors="pt", truncation=True, max_length=128)
+            with torch.no_grad():
+                logits = self.model(**inputs).logits
+            
+            probs = torch.softmax(logits, dim=-1)[0]
+            pred_idx = torch.argmax(probs).item()
+            best_intent = self.labels[pred_idx]
+            confidence = probs[pred_idx].item()
+            scores = {l: probs[i].item() for i, l in enumerate(self.labels)}
+
+            # [보정 로직 통합] 특정 날짜나 과거 시점이 언급된 경우 LOCALIZATION(실시간) 점수 감점
+            past_indicators = [r"\d+월", r"\d+일", "어제", "그저께", "지난", "이전", "전", "아까", "그때"]
+            if any(re.search(p, query) for p in past_indicators):
+                if best_intent == "LOCALIZATION":
+                    # LOCALIZATION이 1위더라도 점수를 깎고 2위를 검토
+                    scores["LOCALIZATION"] *= 0.1
+                    best_intent = max(scores, key=scores.get)
+                    confidence = scores[best_intent]
+                else:
+                    # 이미 다른 의도라면 점수만 보정
+                    scores["LOCALIZATION"] *= 0.1
+                    scores["SUMMARIZATION"] += 0.2
+
+            return IntentResult(
+                intent=best_intent,
+                confidence=confidence,
+                scores=scores,
+                db_route=self.route_map.get(best_intent, "vector_rag"),
+                method="koelectra_finetuned"
+            )
+        except Exception as e:
+            print(f"[Error] KoELECTRA 추론 오류: {e}")
+            return self.fallback_clf.classify(query)
+
+
+
+# ─────────────────────────────────────────────────────────────────────
 # 방식 B: KoELECTRA 파인튜닝 코드 (설치 후 실행)
 # ─────────────────────────────────────────────────────────────────────
 KOELECTRA_TRAIN_CODE = '''
@@ -419,4 +502,6 @@ if __name__ == "__main__":
     run_full_pipeline_demo()
 
 # 서비스 인스턴스 생성 (백엔드 통합용)
-intent_service = RuleBasedIntentClassifier()
+# 모델 폴더가 있으면 FineTunedIntentClassifier를 사용하고, 없으면 RuleBased를 사용합니다.
+intent_service = FineTunedIntentClassifier(model_path="model/koelectra_finetuned")
+
