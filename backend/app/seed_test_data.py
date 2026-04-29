@@ -45,7 +45,7 @@ def seed_data():
         "순찰 중에 발견된 이상 징후 있었니?"
     ]
 
-    intents = ["SUMMARIZATION", "BEHAVIORAL", "LOCALIZATION", "COUNTING", "CAUSAL"]
+    intents = ["정보 요약", "행동", "시간", "사람 수", "오류 감지"]
     severities = ["INFO", "WARNING", "EMERGENCY"]
     alert_types = ["THEFT", "VIOLENCE", "FIRE", "LOITERING", "INTRUSION"]
 

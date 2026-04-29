@@ -14,17 +14,18 @@
   - 단점: GPU/학습 시간 필요
 
 의도 분류 5종:
-  COUNTING       "몇 명이야?" → SQLite COUNT 쿼리
-  SUMMARIZATION  "무슨 일 있었어?" → Vector RAG 검색
-  LOCALIZATION   "지금 어디 있어?" → SQLite 최신 기록
-  BEHAVIORAL     "수상한 거 없었어?" → 이벤트 레코드 + RAG
-  CAUSAL         "왜 알림이 울렸어?" → SQLite + RAG 결합
+  사람 수       "몇 명이야?" → SQLite COUNT 쿼리
+  정보 요약     "무슨 일 있었어?" → Vector RAG 검색
+  시간          "지금 상황은 어때?" → SQLite 최신 기록 / 특정 시간 조회
+  행동          "수상한 거 없었어?" → 이벤트 레코드 + RAG
+  오류 감지     "왜 알림이 울렸어?" → SQLite + RAG 결합
 """
 
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 import re
+import os
 
 
 # ─── 결과 데이터 클래스 ──────────────────────────────────────────────
@@ -65,7 +66,7 @@ class RuleBasedIntentClassifier:
 
     # 각 의도별 키워드와 가중치 (높을수록 강한 신호)
     PATTERNS = {
-        "COUNTING": {
+        "사람 수": {
             "keywords": [
                 ("몇 명", 3.5), ("몇명", 3.5), ("몇 대", 3.5), ("몇대", 3.5),
                 ("총 몇", 3.0), ("몇 번", 2.0), ("몇번", 2.0), ("횟수", 2.5),
@@ -79,7 +80,7 @@ class RuleBasedIntentClassifier:
             ],
             "db_route": "sqlite_count",
         },
-        "SUMMARIZATION": {
+        "정보 요약": {
             "keywords": [
                 ("무슨 일", 3.0), ("뭔 일", 2.5), ("어땠어", 2.5),
                 ("요약", 3.5), ("정리", 3.0), ("알려줘", 1.0),
@@ -94,25 +95,25 @@ class RuleBasedIntentClassifier:
             ],
             "db_route": "vector_rag",
         },
-        "LOCALIZATION": {
+        "시간": {
             "keywords": [
-                ("지금", 3.5), ("현재", 3.5), ("있어?", 2.5), ("있나?", 2.5),
-                ("어디", 3.0), ("위치", 3.0), ("있는지", 2.5),
-                ("실시간", 3.0), ("방금", 2.0), ("지금 당장", 3.5),
-                ("live", 3.0), ("어느 구역", 3.0), ("어느 위치", 3.0),
+                ("언제", 3.5), ("시간", 3.0), ("몇 시", 3.5), ("몇시", 3.5),
+                ("지금", 3.5), ("현재", 3.5), ("방금", 3.0), ("아까", 3.0),
+                ("그때", 3.0), ("최근", 3.0), ("실시간", 3.0), ("시간대", 3.0),
+                ("어디", 1.5), ("위치", 1.5), # 이전 LOCALIZATION 호환용
             ],
             "regex": [
-                r"(지금|현재|방금).*(있|없|어디|위치)",
-                r"(어디에|어디서|어느\s*구역).*(있|없)",
+                r"(언제|몇시|몇 시|시간|지금|방금|현재).*",
+                r".*(시간|때|시점|방금).*",
             ],
             "db_route": "sqlite_latest",
         },
-        "BEHAVIORAL": {
+        "행동": {
             "keywords": [
-                ("수상", 3.5), ("이상", 2.5), ("의심", 3.5),
+                ("행동", 3.5), ("수상", 3.5), ("이상", 2.5), ("의심", 3.5),
                 ("배회", 3.5), ("서성", 3.5), ("침입", 3.5),
                 ("낯선", 3.0), ("이상한", 3.0), ("특이", 2.5),
-                ("이상 행동", 3.5), ("위험", 3.0), ("위협", 3.5),
+                ("위험", 3.0), ("위협", 3.5),
                 ("몰래", 3.0), ("숨어", 3.0), ("빠져나", 2.5),
                 ("담 넘", 3.5), ("무단", 3.0), ("불법", 2.5),
                 ("불", 3.5), ("방화", 3.5), ("화재", 3.5), ("연기", 3.0),
@@ -126,16 +127,17 @@ class RuleBasedIntentClassifier:
             ],
             "db_route": "event_rag",
         },
-        "CAUSAL": {
+        "오류 감지": {
             "keywords": [
+                ("오류", 3.5), ("장애", 3.5), ("고장", 3.5), ("에러", 3.5),
+                ("안 돼", 3.5), ("안돼", 3.5), ("문제", 3.0),
                 ("왜", 3.5), ("이유", 3.5), ("원인", 3.5),
                 ("어떻게 된", 3.0), ("어째서", 3.0),
                 ("어떻게 발생", 3.0), ("경위", 3.5),
-                ("어떻게 생긴", 3.0), ("어쩌다", 2.5),
-                ("설명해", 2.0), ("설명해줘", 2.5), ("분석", 2.5),
-                ("근거", 3.0), ("발단", 3.0),
+                ("알림", 3.0), ("근거", 3.0), ("발단", 3.0),
             ],
             "regex": [
+                r"(오류|장애|에러|고장).*(있|발생|났|생겼|안돼|안 돼)",
                 r"왜\s.*(울|났|발생|생긴|됐|작동|감지)",
                 r"(어떻게|어째서|이유|원인).*(됐|생긴|발생|울린)",
             ],
@@ -164,12 +166,12 @@ class RuleBasedIntentClassifier:
 
     # DB 라우팅 매핑
     ROUTE_MAP = {
-        "COUNTING":      "sqlite_count",
-        "SUMMARIZATION": "vector_rag",
-        "LOCALIZATION":  "sqlite_latest",
-        "BEHAVIORAL":    "event_rag",
-        "CAUSAL":        "sqlite_and_rag",
-        "CHITCHAT":      "none",
+        "사람 수":      "sqlite_count",
+        "정보 요약":    "vector_rag",
+        "시간":         "sqlite_latest",
+        "행동":         "event_rag",
+        "오류 감지":    "sqlite_and_rag",
+        "CHITCHAT":     "none",
     }
 
     def classify(self, query: str) -> IntentResult:
@@ -186,18 +188,18 @@ class RuleBasedIntentClassifier:
                 if re.search(pattern, query):
                     scores[intent] += 2.0
 
-        # [보정] 특정 날짜나 과거 시점이 언급된 경우 LOCALIZATION(실시간) 의도를 배제
+        # [보정] 특정 날짜나 과거 시점이 언급된 경우 시간(실시간) 의도를 배제
         past_indicators = [r"\d+월", r"\d+일", "어제", "그저께", "지난", "이전", "전", "아까", "그때"]
         if any(re.search(p, query) for p in past_indicators):
-            if scores["LOCALIZATION"] > 0:
-                scores["LOCALIZATION"] *= 0.2  # 과거 언급 시 실시간 점수 대폭 삭감
-                scores["SUMMARIZATION"] += 2.0 # 대신 요약/검색 점수 가산
+            if scores["시간"] > 0:
+                scores["시간"] *= 0.2  # 과거 언급 시 실시간 점수 대폭 삭감
+                scores["정보 요약"] += 2.0 # 대신 요약/검색 점수 가산
 
         total = sum(scores.values())
         if total == 0:
-            # 점수가 0이면 SUMMARIZATION 기본값
+            # 점수가 0이면 정보 요약 기본값
             return IntentResult(
-                intent="SUMMARIZATION", confidence=0.4,
+                intent="정보 요약", confidence=0.4,
                 scores=scores, db_route="vector_rag",
                 method="rule_based:fallback"
             )
@@ -207,9 +209,9 @@ class RuleBasedIntentClassifier:
         best_intent = max(norm_scores, key=norm_scores.get)
         confidence  = norm_scores[best_intent]
 
-        # 신뢰도가 너무 낮으면 SUMMARIZATION 기본값
+        # 신뢰도가 너무 낮으면 정보 요약 기본값
         if confidence < 0.35:
-            best_intent = "SUMMARIZATION"
+            best_intent = "정보 요약"
             confidence  = 0.40
 
         return IntentResult(
@@ -219,6 +221,89 @@ class RuleBasedIntentClassifier:
             db_route=self.ROUTE_MAP[best_intent],
             method="rule_based"
         )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# 방식 B: KoELECTRA 파인튜닝 분류기 (실제 서비스용)
+# ─────────────────────────────────────────────────────────────────────
+class FineTunedIntentClassifier:
+    """
+    학습된 KoELECTRA 모델을 사용하여 의도를 분류합니다.
+    모델 로드 실패 시 RuleBasedIntentClassifier를 내부적으로 사용합니다.
+    """
+    def __init__(self, model_path: str = "model/koelectra_finetuned"):
+        self.model_path = model_path
+        self.labels = ["사람 수", "정보 요약", "시간", "행동", "오류 감지"]
+        self.route_map = {
+            "사람 수":      "sqlite_count",
+            "정보 요약":    "vector_rag",
+            "시간":         "sqlite_latest",
+            "행동":         "event_rag",
+            "오류 감지":    "sqlite_and_rag",
+        }
+        self.fallback_clf = RuleBasedIntentClassifier()
+        self.model = None
+        self.tokenizer = None
+        
+        # 모델 로드 시도
+        try:
+            import torch
+            from transformers import AutoTokenizer, AutoModelForSequenceClassification
+            
+            # 절대 경로 확인
+            abs_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../", model_path))
+            if not os.path.exists(abs_path):
+                print(f"[Warning] 모델 경로를 찾을 수 없습니다: {abs_path}")
+                return
+
+            self.tokenizer = AutoTokenizer.from_pretrained(abs_path)
+            self.model = AutoModelForSequenceClassification.from_pretrained(abs_path)
+            self.model.eval()
+            print(f"[Service] KoELECTRA 파인튜닝 모델 로드 완료! ({model_path})")
+        except Exception as e:
+            print(f"[Warning] KoELECTRA 모델 로드 실패 (규칙 기반으로 대체): {e}")
+
+    def classify(self, query: str) -> IntentResult:
+        # 모델이 로드되지 않았으면 규칙 기반으로 수행
+        if self.model is None or self.tokenizer is None:
+            return self.fallback_clf.classify(query)
+
+        try:
+            import torch
+            inputs = self.tokenizer(query, return_tensors="pt", truncation=True, max_length=128)
+            with torch.no_grad():
+                logits = self.model(**inputs).logits
+            
+            probs = torch.softmax(logits, dim=-1)[0]
+            pred_idx = torch.argmax(probs).item()
+            best_intent = self.labels[pred_idx]
+            confidence = probs[pred_idx].item()
+            scores = {l: probs[i].item() for i, l in enumerate(self.labels)}
+
+            # [보정 로직 통합] 특정 날짜나 과거 시점이 언급된 경우 시간(실시간) 점수 감점
+            past_indicators = [r"\d+월", r"\d+일", "어제", "그저께", "지난", "이전", "전", "아까", "그때"]
+            if any(re.search(p, query) for p in past_indicators):
+                if best_intent == "시간":
+                    # 시간이 1위더라도 점수를 깎고 2위를 검토
+                    scores["시간"] *= 0.1
+                    best_intent = max(scores, key=scores.get)
+                    confidence = scores[best_intent]
+                else:
+                    # 이미 다른 의도라면 점수만 보정
+                    scores["시간"] *= 0.1
+                    scores["정보 요약"] += 0.2
+
+            return IntentResult(
+                intent=best_intent,
+                confidence=confidence,
+                scores=scores,
+                db_route=self.route_map.get(best_intent, "vector_rag"),
+                method="koelectra_finetuned"
+            )
+        except Exception as e:
+            print(f"[Error] KoELECTRA 추론 오류: {e}")
+            return self.fallback_clf.classify(query)
+
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -419,4 +504,6 @@ if __name__ == "__main__":
     run_full_pipeline_demo()
 
 # 서비스 인스턴스 생성 (백엔드 통합용)
-intent_service = RuleBasedIntentClassifier()
+# 모델 폴더가 있으면 FineTunedIntentClassifier를 사용하고, 없으면 RuleBased를 사용합니다.
+intent_service = FineTunedIntentClassifier(model_path="model/koelectra_finetuned")
+

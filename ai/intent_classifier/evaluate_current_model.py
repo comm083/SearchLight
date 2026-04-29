@@ -12,16 +12,16 @@ def evaluate_current_model():
     # 1. 평가용 테스트 데이터 (정답 라벨 포함)
     # 실제 환경에서 자주 쓰일 법한 발화 10개를 선정
     test_data = [
-        {"text": "빨간 옷 입은 사람 총 몇 명이야?", "expected": "COUNTING"},
-        {"text": "어제 오후에 무슨 일 있었어?", "expected": "SUMMARIZATION"},
-        {"text": "지금 주차장에 차 있어?", "expected": "LOCALIZATION"},
-        {"text": "수상한 사람 없었어?", "expected": "BEHAVIORAL"},
-        {"text": "왜 30분 전에 알람이 울렸어?", "expected": "CAUSAL"},
-        {"text": "오늘 오전 상황 요약해줘", "expected": "SUMMARIZATION"},
-        {"text": "현재 로비에 인원 몇 명인지 세어봐", "expected": "COUNTING"},
-        {"text": "담 넘으려는 사람 감지됐어?", "expected": "BEHAVIORAL"},
-        {"text": "그 사고 어떻게 발생한 거야?", "expected": "CAUSAL"},
-        {"text": "안녕 반가워", "expected": "CHITCHAT"}
+        {"text": "빨간 옷 입은 사람 총 몇 명이야?",   "expected": "사람 수"},
+        {"text": "어제 오후에 무슨 일 있었어?",        "expected": "정보 요약"},
+        {"text": "지금 몇 시야?",                    "expected": "시간"},
+        {"text": "수상한 사람 없었어?",               "expected": "행동"},
+        {"text": "왜 30분 전에 알람이 울렸어?",       "expected": "오류 감지"},
+        {"text": "오늘 오전 상황 요약해줘",            "expected": "정보 요약"},
+        {"text": "현재 로비에 인원 몇 명인지 세어봐",   "expected": "사람 수"},
+        {"text": "담 넘으려는 사람 감지됐어?",         "expected": "행동"},
+        {"text": "시스템 오류가 왜 발생했어?",         "expected": "오류 감지"},
+        {"text": "안녕 반가워",                      "expected": "CHITCHAT"}
     ]
     
     correct_count = 0

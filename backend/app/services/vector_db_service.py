@@ -140,6 +140,12 @@ class VectorDBService:
                 reverse=is_newest
             )
 
+        # 점수 상대 정규화 (0 ~ 100)
+        raw_scores = [float(c[1]) for c in candidates]
+        max_score = max(raw_scores) if raw_scores else 0
+        min_score = min(raw_scores) if raw_scores else 0
+        score_range = max_score - min_score if max_score > min_score else 1e-5
+
         results = []
         for i, (item, score) in enumerate(candidates[:top_k]):
             # 프레임 데이터에서 상세 묘사 추출 (요청된 시간 범위로 필터링)
@@ -165,6 +171,9 @@ class VectorDBService:
                             "description": f.get("notes") or f.get("person")
                         })
 
+            # 상대 정규화 수식 적용
+            normalized_score = ((float(score) - min_score) / score_range) * 100.0
+
             results.append({
                 "rank":           i + 1,
                 "description":    item.get("summary", ""),
@@ -173,7 +182,7 @@ class VectorDBService:
                 "timestamp":      item.get("event_date"), 
                 "frames":         item.get("frames", []),
                 "detections":     detailed_detections,
-                "score":          round(float(score), 4),
+                "score":          round(normalized_score, 1),
                 "image_path":     item.get("image_path") or "/static/images/default_thumb.png",
                 "video_url":      f"/static/mp4Data/{item.get('video_filename', '')}",
             })

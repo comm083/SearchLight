@@ -4,11 +4,14 @@ import re
 import os
 import sys
 import tempfile
+import random
+from datetime import datetime, timedelta
+from typing import Optional, Any
 from openai import OpenAI
 import cv2
 from dotenv import load_dotenv
-from supabase import create_client, Client
 import easyocr
+from supabase import create_client, Client
 
 load_dotenv()
 
@@ -35,7 +38,7 @@ def get_supabase_client() -> Client:
 # ─────────────────────────────────────────────
 _ocr_reader = None
 
-def get_ocr_reader():
+def get_ocr_reader() -> Any:
     global _ocr_reader
     if _ocr_reader is None:
         print("  [OCR] EasyOCR 초기화 중 (첫 실행 시 모델 다운로드)...")
@@ -153,8 +156,25 @@ def read_timestamp_from_frame(frame) -> str | None:
         if result:
             return result
 
-    print("  [OCR 경고] 타임스탬프를 인식하지 못했습니다 → event_date = NULL")
-    return None
+    print("  [OCR 경고] 타임스탬프를 인식하지 못했습니다 → 1주일 이내 랜덤 타임스탬프 할당")
+    return _generate_random_timestamp()
+
+
+# 중복 방지를 위한 전역 세트
+_generated_timestamps = set()
+
+def _generate_random_timestamp() -> str:
+    """최근 1주일 이내의 중복되지 않는 랜덤 타임스탬프를 생성합니다."""
+    global _generated_timestamps
+    now = datetime.now()
+    while True:
+        # 1주일 이내 랜덤 초 빼기 (7일 * 24시간 * 60분 * 60초 = 604800)
+        random_seconds = random.randint(0, 604800)
+        random_dt = now - timedelta(seconds=random_seconds)
+        ts_str = random_dt.strftime("%Y-%m-%d %H:%M:%S")
+        if ts_str not in _generated_timestamps:
+            _generated_timestamps.add(ts_str)
+            return ts_str
 
 
 # ─────────────────────────────────────────────
@@ -175,7 +195,7 @@ def _detect_motion(prev_gray, curr_gray) -> bool:
     return any(cv2.contourArea(c) > MOTION_AREA for c in contours)
 
 
-def encode_video_and_extract_clips(video_path: str):
+def encode_video_and_extract_clips(video_path: str) -> tuple:
     """
     Returns:
         base64frames (list[str])  : GPT 분석용 base64 프레임
@@ -489,8 +509,8 @@ def main():
         process_video(args.video)
         return
 
-    # 기본 경로: backend/static/sampleData
-    video_dir = args.dir or os.path.join(os.path.dirname(__file__), "..", "static", "sampleData")
+    # 기본 경로: backend/static/mp4Data
+    video_dir = args.dir or os.path.join(os.path.dirname(__file__), "..", "static", "mp4Data")
     if not os.path.exists(video_dir):
         print(f"오류: 디렉토리를 찾을 수 없습니다: {video_dir}")
         return
