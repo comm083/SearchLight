@@ -28,11 +28,13 @@ class VectorDBService:
 
     def _build_index(self):
         try:
-            # 1. 실제 비디오 상세 데이터 로드 (프레임 정보 포함)
+    def _build_index(self):
+        try:
+            # 1. 실제 비디오 상세 데이터 로드 (frames 컬럼이 없을 수 있으므로 유연하게 처리)
             video_resp = self.supabase.table('cctv_videos').select('*').execute()
             video_map = {str(v['id']): v for v in (video_resp.data or [])}
             
-            # 2. 검색 벡터 데이터 로드 (전체 150+건)
+            # 2. 검색 벡터 데이터 로드
             vector_resp = self.supabase.table('cctv_vectors').select('id, content, metadata').execute()
             vector_data = vector_resp.data or []
             
@@ -41,13 +43,12 @@ class VectorDBService:
                 meta = v.get('metadata', {})
                 video_id = meta.get('video_id')
                 
-                # 비디오 정보 연동
                 video_info = video_map.get(video_id) if video_id else None
                 
                 item = {
                     "id":             v['id'],
                     "summary":        v['content'],
-                    "description":    v['content'], # 하위 호환성
+                    "description":    v['content'],
                     "image_path":     meta.get('image_path') or "/static/images/default_thumb.png",
                     "location":       meta.get('location', '보안 구역'),
                     "event_date":     meta.get('timestamp'),
@@ -61,7 +62,7 @@ class VectorDBService:
             self.scene_data = []
 
         if not self.scene_data:
-            print("[Vector DB 경고] 데이터 없음 — 검색 비활성화")
+            print("[Vector DB 경고] 데이터 없음 - 검색 비활성화")
             return
 
         summaries = [item.get("summary", "") for item in self.scene_data]
@@ -112,12 +113,9 @@ class VectorDBService:
         is_oldest = any(kw in query for kw in OLDEST_KEYWORDS)
         is_newest = any(kw in query for kw in NEWEST_KEYWORDS)
         
-        # 필터링된 데이터 기반으로 다시 인덱싱하거나, 전체 결과에서 필터링하는 방식 중 선택
-        # 여기서는 간단히 전체 임베딩에서 검색 후 결과 중 필터링된 것만 남기는 방식 사용
         query_embedding = self.model.encode([query]).astype('float32')
         faiss.normalize_L2(query_embedding)
         
-        # 필터링을 위해 k를 넉넉하게 잡음
         search_k = min(len(self.scene_data), 50) 
         scores, indices = self.index.search(query_embedding, search_k)
 
@@ -128,7 +126,6 @@ class VectorDBService:
             if idx < len(self.scene_data):
                 item = self.scene_data[idx]
                 if id(item) in filtered_ids:
-                    # 스코어 정보 보존을 위해 튜플로 저장
                     candidates.append((item, scores[0][i]))
             
             if len(candidates) >= top_k:
@@ -142,29 +139,6 @@ class VectorDBService:
 
         results = []
         for i, (item, score) in enumerate(candidates[:top_k]):
-            # 프레임 데이터에서 상세 묘사 추출 (요청된 시간 범위로 필터링)
-            frames = item.get("frames", [])
-            detailed_detections = []
-            
-            # 검색 시간 범위 파싱
-            st_dt = parse_dt(start_time)
-            et_dt = parse_dt(end_time)
-            
-            if isinstance(frames, list):
-                for f in frames:
-                    f_time_str = f.get("timestamp") or f.get("time")
-                    f_dt = parse_dt(f_time_str)
-                    
-                    # 시간 범위 필터링 적용 (있는 경우에만)
-                    if st_dt and f_dt and f_dt < st_dt: continue
-                    if et_dt and f_dt and f_dt > et_dt: continue
-                    
-                    if f.get("notes") or f.get("person"):
-                        detailed_detections.append({
-                            "time": f_time_str,
-                            "description": f.get("notes") or f.get("person")
-                        })
-
             results.append({
                 "rank":           i + 1,
                 "description":    item.get("summary", ""),
@@ -172,13 +146,13 @@ class VectorDBService:
                 "event_date":     item.get("event_date"),
                 "timestamp":      item.get("event_date"), 
                 "frames":         item.get("frames", []),
-                "detections":     detailed_detections,
                 "score":          round(float(score), 4),
                 "image_path":     item.get("image_path") or "/static/images/default_thumb.png",
                 "video_url":      f"/static/mp4Data/{item.get('video_filename', '')}",
             })
 
         print(f"[Vector DB] {len(results)}개 유사 장면 검색 완료 (필터링 적용).")
+
         return results
 
     def reload(self):
