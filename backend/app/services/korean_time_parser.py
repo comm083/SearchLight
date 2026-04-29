@@ -229,8 +229,18 @@ class KoreanTimeParser:
         date_keywords = ("어제", "오늘", "내일", "그저께", "그제", "지난주", "저번 주", "지지난주", "이번 주")
         if not any(kw in q for kw in date_keywords) and not re.search(r'\d+\s*월', q):
             return None
+        
         start = datetime.combine(d, time(0, 0))
         end   = datetime.combine(d, time(23, 59))
+        
+        # 주 단위 처리 (7일 범위)
+        if any(kw in q for kw in ("지난주", "저번 주", "지지난주", "이번 주")):
+            # 해당 날짜(d)가 속한 주의 월요일부터 일요일까지로 범위 확장
+            weekday = d.weekday() # 0: Mon, 6: Sun
+            start = datetime.combine(d - timedelta(days=weekday), time(0, 0))
+            end = datetime.combine(start + timedelta(days=6), time(23, 59, 59))
+            return TimeRange(start, end, 0.85, "date_range:week", q)
+
         return TimeRange(start, end, 0.70, "date_only", q)
 
     # ─── 헬퍼 ────────────────────────────────────────────────────────

@@ -25,6 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 import re
+import os
 
 
 # ─── 결과 데이터 클래스 ──────────────────────────────────────────────
@@ -118,7 +119,7 @@ class RuleBasedIntentClassifier:
                 ("불", 3.5), ("방화", 3.5), ("화재", 3.5), ("연기", 3.0),
                 ("싸움", 3.5), ("폭행", 3.5), ("때림", 3.0), ("멱살", 3.0),
                 ("절도", 3.5), ("훔침", 3.5), ("몰래 넣", 3.5),
-                ("사건", 2.5), ("사고", 3.0),
+                ("사건", 2.5), ("사고", 3.0), ("문제", 2.5), ("특이사항", 3.0), ("별일", 2.5),
             ],
             "regex": [
                 r"(수상|의심|이상한|낯선|특이).*(사람|인물|남자|여자|차|행동)",
@@ -150,6 +151,8 @@ class RuleBasedIntentClassifier:
                 ("weather", 3.0), ("hello", 3.0), ("hi", 3.0), ("how are you", 2.5),
                 ("who are you", 2.0), ("what is your name", 2.0),
                 ("넌 뭐야", 2.5), ("도와줘", 1.0),
+                ("넌", 1.5), ("너는", 1.5), ("어떻게 돼", 2.0), ("말하면", 1.5),
+                ("시스템", 1.5), ("분석관", 1.5),
             ],
             "regex": [
                 r"(안녕|하이|방가).*",
@@ -157,6 +160,7 @@ class RuleBasedIntentClassifier:
                 r".*(날씨|기분|배고|졸려).*",
                 r"(hello|hi|hey).*",
                 r".*weather.*",
+                r"(넌|너는|너의).*(뭐|어떻게|누구).*",
             ],
             "db_route": "none",
         },
@@ -262,9 +266,15 @@ class FineTunedIntentClassifier:
             print(f"[Warning] KoELECTRA 모델 로드 실패 (규칙 기반으로 대체): {e}")
 
     def classify(self, query: str) -> IntentResult:
-        # 모델이 로드되지 않았으면 규칙 기반으로 수행
+        # 1. 일상 대화 키워드 강제 체크 (모델 오판 방지용 예외 필터)
+        # "넌", "너는", "어떻게 돼" 등 시스템 지칭 키워드가 있으면 모델 추론 전 CHITCHAT 우선 처리
+        rule_res = self.fallback_clf.classify(query)
+        if rule_res.intent == "CHITCHAT" and rule_res.confidence >= 0.4:
+            return rule_res
+
+        # 2. 모델이 로드되지 않았으면 규칙 기반으로 수행
         if self.model is None or self.tokenizer is None:
-            return self.fallback_clf.classify(query)
+            return rule_res
 
         try:
             import torch
@@ -276,7 +286,12 @@ class FineTunedIntentClassifier:
             pred_idx = torch.argmax(probs).item()
             best_intent = self.labels[pred_idx]
             confidence = probs[pred_idx].item()
-            scores = {l: probs[i].item() for i, l in enumerate(self.labels)}
+            if math.isnan(confidence): confidence = 0.0
+            
+            scores = {}
+            for i, l in enumerate(self.labels):
+                val = probs[i].item()
+                scores[l] = 0.0 if math.isnan(val) else val
 
             # [보정 로직 통합] 특정 날짜나 과거 시점이 언급된 경우 LOCALIZATION(실시간) 점수 감점
             past_indicators = [r"\d+월", r"\d+일", "어제", "그저께", "지난", "이전", "전", "아까", "그때"]
@@ -301,6 +316,8 @@ class FineTunedIntentClassifier:
         except Exception as e:
             print(f"[Error] KoELECTRA 추론 오류: {e}")
             return self.fallback_clf.classify(query)
+
+import math
 
 
 

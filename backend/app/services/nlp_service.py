@@ -180,5 +180,24 @@ class NLPService:
         except Exception as e:
             return "반갑습니다. 지능형 보안 분석관 SearchLight입니다. 무엇을 도와드릴까요?\n\n저는 CCTV 영상 분석과 보안 관제에 최적화되어 있습니다. 원활한 분석을 위해 아래와 같이 보안/관제와 관련된 질문을 입력해 주시기 바랍니다.\n\n💡 **질문 예시:**\n- 인물 검색: '빨간색 옷을 입은 사람 찾아줘'\n- 상황 요약: '어제 오후 주차장 상황 요약해줘'\n- 실시간 확인: '지금 로비에 특이사항 있어?'"
 
+    def transcribe_audio(self, audio_file_path: str) -> str:
+        """
+        OpenAI Whisper API를 사용하여 오디오 파일을 텍스트로 변환합니다.
+        """
+        if not self.client:
+            return "STT 기능이 비활성화 상태입니다."
+        
+        try:
+            with open(audio_file_path, "rb") as audio_file:
+                transcript = self.client.audio.transcriptions.create(
+                    model="whisper-1", 
+                    file=audio_file,
+                    language="ko"
+                )
+            return transcript.text
+        except Exception as e:
+            print(f"[STT Error] 음성 인식 중 오류 발생: {e}")
+            return ""
+
 # 싱글톤 인스턴스 생성
 nlp_service = NLPService()

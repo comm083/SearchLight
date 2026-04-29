@@ -54,46 +54,36 @@ def generate_augmented_data(intent_id: int, num_samples: int = 10):
 
 def build_dataset():
     """
-    직접 구축한 데이터(30%)와 GPT로 증강한 데이터(70%)를 결합하여 
-    총 300건의 데이터셋을 구축합니다. (각 클래스당 60건씩)
+    기존 데이터셋을 로드하고, GPT를 통해 부족한 데이터를 대량 증강하여 
+    클래스당 최소 150건 이상의 풍부한 데이터셋을 구축합니다.
     """
-    # 1. 수동으로 작성된 초기 시드 데이터 예시 (직접 30% - 총 90건 중 일부)
-    manual_data = [
-        {"text": "어제 오후 3시 주차장 화면 보여줘", "label": 0},
-        {"text": "정문 카메라 1번 확인해볼래?", "label": 0},
-        {"text": "불난 것 같아 빨리 확인해!", "label": 1},
-        {"text": "CCTV에 쓰러진 사람이 있어요", "label": 1},
-        {"text": "후문 카메라 연결이 끊겼어", "label": 2},
-        {"text": "화면이 너무 어두워서 안보여", "label": 2},
-        {"text": "검은색 세단 지나갔어?", "label": 3},
-        {"text": "외부인 출입 기록 좀 찾아줘", "label": 3},
-        {"text": "오늘 날씨 어때?", "label": 4},
-        {"text": "수고 많으십니다", "label": 4},
-    ]
-    
-    # 현실적으로는 수동 데이터가 90건 필요함
-    # 여기서는 데모를 위해 바로 GPT 증강으로 채웁니다 (70% = 210건)
-    
+    csv_path = "intent_dataset.csv"
+    if os.path.exists(csv_path):
+        print(f"[Info] 기존 데이터셋 로드 중: {csv_path}")
+        existing_df = pd.read_csv(csv_path, encoding="utf-8-sig")
+    else:
+        existing_df = pd.DataFrame(columns=["text", "label"])
+
     augmented_data = []
-    # 각 클래스별로 필요한 증강 개수 (예: 클래스당 42개씩 생성해서 210건)
-    # 실제로는 manual_data 개수 파악 후 부족분만큼 생성
     for i in range(5):
-        print(f"Generating augmented data for: {INTENT_CATEGORIES[i]}...")
-        # API 호출 비용 및 시간 절약을 위해 처음에는 클래스당 20개씩 생성 (총 100개)
-        new_data = generate_augmented_data(intent_id=i, num_samples=40)
+        print(f"Generating 100 new samples for: {INTENT_CATEGORIES[i]}...")
+        # 클래스별로 100개씩 추가 생성
+        new_data = generate_augmented_data(intent_id=i, num_samples=100)
         augmented_data.extend(new_data)
 
     # 데이터 결합
-    total_dataset = manual_data + augmented_data
+    new_df = pd.DataFrame(augmented_data)
+    total_df = pd.concat([existing_df, new_df], ignore_index=True)
     
-    # DataFrame 변환 및 저장
-    df = pd.DataFrame(total_dataset)
+    # 중복 문장 제거
+    total_df = total_df.drop_duplicates(subset=['text']).reset_index(drop=True)
+    
     # 셔플
-    df = df.sample(frac=1).reset_index(drop=True)
+    total_df = total_df.sample(frac=1).reset_index(drop=True)
     
     # CSV 저장
-    df.to_csv("intent_dataset.csv", index=False, encoding="utf-8-sig")
-    print(f"Dataset successfully saved with {len(df)} records.")
+    total_df.to_csv(csv_path, index=False, encoding="utf-8-sig")
+    print(f"Dataset successfully expanded! Total records: {len(total_df)}")
 
 if __name__ == "__main__":
     build_dataset()

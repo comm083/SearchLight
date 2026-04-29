@@ -50,6 +50,28 @@ class SupabaseService:
             print(f"[Supabase Error] 히스토리 조회 실패: {e}")
             return []
 
+    def delete_search_history(self, history_id: str):
+        """
+        특정 ID의 검색 기록을 삭제합니다.
+        """
+        try:
+            # ID가 숫자인 경우 숫자로 변환 (Supabase 타입 매칭을 위해)
+            target_id = history_id
+            try:
+                if isinstance(history_id, str) and history_id.isdigit():
+                    target_id = int(history_id)
+            except:
+                pass
+
+            response = self.supabase.table('search_logs') \
+                .delete() \
+                .eq("id", target_id) \
+                .execute()
+            return True
+        except Exception as e:
+            print(f"[Supabase Error] 히스토리 삭제 실패: {e}")
+            return False
+
     def save_alert(self, alert_data: dict):
         """
         실시간 감지된 이상 행동 알림을 Supabase 'alerts' 테이블에 저장합니다.
