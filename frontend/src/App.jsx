@@ -19,10 +19,18 @@ const App = () => {
   const [user, setUser] = useState({ name: '방문객', role: 'Guest' });
   const [loginInput, setLoginInput] = useState({ id: '', pw: '' });
 
-  const [recentSearches, setRecentSearches] = useState([
-    { id: 1, title: '검은색 지갑', location: '3층 회의실', date: '2026-04-20', messages: [], user: '김지은님' },
-    { id: 2, title: '애플 노트북', location: '카페테리아', date: '2026-04-19', messages: [], user: '박민수님' }
-  ]);
+  const [recentSearches, setRecentSearches] = useState([]);
+  
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // 설정 관련 상태
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settings, setSettings] = useState({
+    sensitivity: 70,
+    enableSound: true,
+    viewMode: 'list', // 'list' 또는 'map'
+    autoDeleteDays: 30
+  });
 
   const chatEndRef = useRef(null);
 
@@ -30,8 +38,38 @@ const App = () => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // 백엔드에서 검색 기록 가져오기
+  const fetchHistory = async () => {
+    try {
+      const sessionId = isLoggedIn ? user.name : 'guest';
+      const res = await fetch(`http://localhost:8000/api/history/${sessionId}`);
+      const data = await res.json();
+      if (data.status === 'success' && data.history) {
+        const formattedHistory = data.history.map(item => ({
+          id: item.id,
+          title: item.query,
+          location: item.intent,
+          date: new Date(item.created_at).toLocaleDateString(),
+          ai_report: item.ai_report,
+          messages: [
+            { type: 'user', text: item.query },
+            { type: 'ai', report: item.ai_report, intent: item.intent }
+          ]
+        }));
+        setRecentSearches(formattedHistory);
+      }
+    } catch (error) {
+      console.error("히스토리 로딩 실패:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchHistory();
+  }, [isLoggedIn, user.name]);
+
   useEffect(() => {
     if (currentSessionId && messages.length > 0) {
+      // 로컬 상태 업데이트 (실시간 반영용)
       setRecentSearches(prev => prev.map(s => 
         s.id === currentSessionId ? { ...s, messages: messages } : s
       ));
@@ -46,7 +84,17 @@ const App = () => {
 
   const handleHistoryClick = (session) => {
     setCurrentSessionId(session.id);
-    setMessages(session.messages || []);
+    // 히스토리 항목 클릭 시 해당 메시지 복구
+    if (session.messages && session.messages.length > 0) {
+      setMessages(session.messages);
+    } else if (session.ai_report) {
+      setMessages([
+        { type: 'user', text: session.title },
+        { type: 'ai', report: session.ai_report, intent: session.location }
+      ]);
+    } else {
+      setMessages([]);
+    }
     setQuery('');
   };
 
@@ -100,13 +148,21 @@ const App = () => {
     setQuery('');
     setLoading(true);
     try {
+      const sessionId = isLoggedIn ? user.name : 'guest';
       const res = await fetch('http://localhost:8000/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: text, top_k: 4 }),
+        body: JSON.stringify({ 
+          query: text, 
+          top_k: 4,
+          session_id: sessionId
+        }),
       });
       const data = await res.json();
       setMessages(prev => [...prev, { type: 'ai', report: data.ai_report || data.answer || "보안 관련 질문을 입력해 주세요.", results: data.results || [], intent: data.intent_info?.intent || "OOD" }]);
+      
+      // 검색 성공 후 히스토리 갱신
+      fetchHistory();
     } catch (error) {
       setMessages(prev => [...prev, { type: 'ai', report: "서버 연결 오류가 발생했습니다.", intent: "ERROR" }]);
     } finally {
@@ -118,11 +174,13 @@ const App = () => {
     <div className="app-container">
       <aside className="sidebar">
         <button className="new-chat-btn" onClick={handleNewChat}><Plus size={18} /><span>새 채팅</span></button>
-        <div className="search-box"><Search className="search-icon" size={14} /><input type="text" placeholder="분실물 검색..." /></div>
+        <div className="search-box"><Search className="search-icon" size={14} /><input type="text" placeholder="최근 기록 검색..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
         <div className="history-section">
           <div className="history-title"><Clock size={12} /><span>최근 검색 기록</span></div>
           <div className="history-section-container" style={{maxHeight: 'calc(100vh - 250px)', overflowY: 'auto'}}>
-            {recentSearches.map(item => (
+            {recentSearches
+              .filter(item => item.title.toLowerCase().includes(searchTerm.toLowerCase()))
+              .map(item => (
               <div key={item.id} className={`history-item group ${currentSessionId === item.id ? 'active' : ''}`} onClick={() => handleHistoryClick(item)} style={{backgroundColor: currentSessionId === item.id ? '#1f2937' : 'transparent', position: 'relative', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                 <div style={{flex: 1, overflow: 'hidden'}}><div className="item-title" style={{whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: '20px'}}>{item.title}</div><div className="item-info">{item.location} • {item.date}</div></div>
                 <button 
@@ -161,7 +219,7 @@ const App = () => {
           <div className="header-logo">Searchlight <MoreVertical size={14} /></div>
           <div style={{display: 'flex', gap: '20px', color: '#9ca3af'}}>
             <User size={18} cursor="pointer" onClick={isLoggedIn ? () => setShowLogoutModal(true) : () => setShowLoginModal(true)} style={{color: isLoggedIn ? '#3b82f6' : '#9ca3af'}} />
-            <Settings size={18} cursor="pointer" />
+            <Settings size={18} cursor="pointer" onClick={() => setShowSettingsModal(true)} className="hover:text-white transition-colors" />
           </div>
         </header>
 
@@ -187,63 +245,76 @@ const App = () => {
                         {msg.report}
                       </div>
                       {msg.results?.length > 0 && (
-                        <div style={{display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px'}}>
-                          {msg.results.map((res, j) => {
-                            const resultKey = `${i}-${j}`;
-                            const isExpanded = expandedResults[resultKey];
-                            
-                            return (
-                              <div key={j} className="result-card" style={{backgroundColor: '#0b0f19', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)', transition: 'all 0.3s ease'}}>
-                                <div style={{display: 'flex', gap: '15px', padding: '12px'}}>
-                                  <div style={{width: '140px', height: '100px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, position: 'relative'}}>
-                                    <img src={`http://localhost:8000${res.image_path}`} style={{width: '100%', height: '100%', objectFit: 'cover'}} alt="cctv thumb" />
-                                    <div style={{position: 'absolute', bottom: '5px', right: '5px', backgroundColor: 'rgba(0,0,0,0.6)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', color: '#3b82f6'}}>{(res.score * 100).toFixed(0)}%</div>
-                                  </div>
-                                  <div style={{flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between'}}>
-                                    <div>
-                                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px'}}>
-                                        <div style={{fontSize: '11px', color: '#3b82f6', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px'}}><Clock size={10} /> {res.timestamp ? new Date(res.timestamp).toLocaleString('ko-KR') : '시간 정보 없음'}</div>
-                                        <div style={{fontSize: '10px', color: '#6b7280'}}>{res.video_filename}</div>
+                        <div style={{marginTop: '20px'}}>
+                          {settings.viewMode === 'list' ? (
+                            <div style={{display: 'flex', flexDirection: 'column', gap: '15px'}}>
+                              {msg.results.map((res, j) => {
+                                const resultKey = `${i}-${j}`;
+                                const isExpanded = expandedResults[resultKey];
+                                
+                                return (
+                                  <div key={j} className="result-card" style={{backgroundColor: '#0b0f19', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)', transition: 'all 0.3s ease'}}>
+                                    <div style={{display: 'flex', gap: '15px', padding: '12px'}}>
+                                      <div style={{width: '140px', height: '100px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, position: 'relative'}}>
+                                        <img src={`http://localhost:8000${res.image_path}`} style={{width: '100%', height: '100%', objectFit: 'cover'}} alt="cctv thumb" />
+                                        <div style={{position: 'absolute', bottom: '5px', right: '5px', backgroundColor: 'rgba(0,0,0,0.6)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', color: '#3b82f6'}}>{(res.score * 100).toFixed(0)}%</div>
                                       </div>
-                                      <div style={{fontSize: '13px', color: '#f3f4f6', lineHeight: '1.4', marginBottom: '8px'}}>{res.description}</div>
+                                      <div style={{flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between'}}>
+                                        <div>
+                                          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px'}}>
+                                            <div style={{fontSize: '11px', color: '#3b82f6', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px'}}><Clock size={10} /> {res.timestamp ? new Date(res.timestamp).toLocaleString('ko-KR') : '시간 정보 없음'}</div>
+                                            <div style={{fontSize: '10px', color: '#6b7280'}}>{res.video_filename}</div>
+                                          </div>
+                                          <div style={{fontSize: '13px', color: '#f3f4f6', lineHeight: '1.4', marginBottom: '8px'}}>{res.description}</div>
+                                        </div>
+                                        {res.detections?.length > 0 && (
+                                          <button 
+                                            onClick={() => setExpandedResults(prev => ({...prev, [resultKey]: !prev[resultKey]}))}
+                                            style={{background: 'rgba(59, 130, 246, 0.1)', border: 'none', color: '#60a5fa', fontSize: '11px', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '4px'}}
+                                          >
+                                            {isExpanded ? '상세 정보 접기' : `${res.detections.length}개의 상세 묘사 보기`}
+                                          </button>
+                                        )}
+                                      </div>
                                     </div>
-                                    {res.detections?.length > 0 && (
-                                      <button 
-                                        onClick={() => setExpandedResults(prev => ({...prev, [resultKey]: !prev[resultKey]}))}
-                                        style={{background: 'rgba(59, 130, 246, 0.1)', border: 'none', color: '#60a5fa', fontSize: '11px', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '4px'}}
-                                      >
-                                        {isExpanded ? '상세 정보 접기' : `${res.detections.length}개의 상세 묘사 보기`}
-                                      </button>
+                                    
+                                    {isExpanded && res.detections?.length > 0 && (
+                                      <div style={{padding: '0 15px 15px', borderTop: '1px solid rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.02)'}}>
+                                        <div style={{marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative'}}>
+                                          <div style={{position: 'absolute', left: '75px', top: '5px', bottom: '5px', width: '2px', backgroundColor: 'rgba(59, 130, 246, 0.2)'}}></div>
+                                          {res.detections.map((det, k) => {
+                                            const timeStr = det.time && det.time.includes('T') 
+                                              ? det.time.split('T')[1].split('.')[0] 
+                                              : (det.time && det.time.includes(' ') ? det.time.split(' ')[1] : det.time);
+                                            return (
+                                              <div key={k} style={{display: 'flex', gap: '20px', alignItems: 'center', fontSize: '12px', position: 'relative', zIndex: 1}}>
+                                                <div style={{color: '#3b82f6', fontWeight: 'bold', whiteSpace: 'nowrap', width: '60px', textAlign: 'right'}}>{timeStr}</div>
+                                                <div style={{width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#3b82f6', border: '2px solid #0b0f19', marginLeft: '-5px'}}></div>
+                                                <div style={{color: '#d1d5db', lineHeight: '1.4', backgroundColor: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '8px', flex: 1}}>{det.description}</div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
                                     )}
                                   </div>
-                                </div>
-                                
-                                {isExpanded && res.detections?.length > 0 && (
-                                  <div style={{padding: '0 15px 15px', borderTop: '1px solid rgba(255,255,255,0.05)', backgroundColor: 'rgba(255,255,255,0.02)'}}>
-                                    <div style={{marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative'}}>
-                                      {/* Timeline Line */}
-                                      <div style={{position: 'absolute', left: '75px', top: '5px', bottom: '5px', width: '2px', backgroundColor: 'rgba(59, 130, 246, 0.2)'}}></div>
-                                      
-                                      {res.detections.map((det, k) => {
-                                        // 타임스탬프에서 시:분:초만 추출
-                                        const timeStr = det.time && det.time.includes('T') 
-                                          ? det.time.split('T')[1].split('.')[0] 
-                                          : (det.time && det.time.includes(' ') ? det.time.split(' ')[1] : det.time);
-
-                                        return (
-                                          <div key={k} style={{display: 'flex', gap: '20px', alignItems: 'center', fontSize: '12px', position: 'relative', zIndex: 1}}>
-                                            <div style={{color: '#3b82f6', fontWeight: 'bold', whiteSpace: 'nowrap', width: '60px', textAlign: 'right'}}>{timeStr}</div>
-                                            <div style={{width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#3b82f6', border: '2px solid #0b0f19', marginLeft: '-5px'}}></div>
-                                            <div style={{color: '#d1d5db', lineHeight: '1.4', backgroundColor: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '8px', flex: 1}}>{det.description}</div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div style={{backgroundColor: '#0b0f19', borderRadius: '15px', height: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '2px dashed rgba(59, 130, 246, 0.3)', gap: '15px'}}>
+                              <div style={{fontSize: '40px'}}>🗺️</div>
+                              <div style={{textAlign: 'center'}}>
+                                <div style={{fontSize: '20px', fontWeight: 'bold', color: 'white', marginBottom: '5px'}}>건물 도면 기반 위치 확인 중</div>
+                                <div style={{fontSize: '14px', color: '#6b7280'}}>감지된 이벤트 {msg.results.length}건이 지도에 표시됩니다.</div>
                               </div>
-                            );
-                          })}
+                              <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
+                                {msg.results.map((res, idx) => (
+                                  <div key={idx} style={{width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#ef4444', boxShadow: '0 0 10px #ef4444', animation: 'pulse 1.5s infinite'}}></div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -288,6 +359,109 @@ const App = () => {
               <button onClick={executeLogout} style={{flex: 1, backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '10px', padding: '14px', fontWeight: 'bold', cursor: 'pointer'}}>로그아웃</button>
               <button onClick={() => setShowLogoutModal(false)} style={{flex: 1, backgroundColor: '#1f2937', color: 'white', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '10px', padding: '14px', fontWeight: 'bold', cursor: 'pointer'}}>취소</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div className="modal-overlay" style={{position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000}}>
+          <div className="modal-content" style={{backgroundColor: '#111827', padding: '25px 30px', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)', width: '500px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto'}}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
+              <h2 style={{fontSize: '22px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px'}}><Settings className="text-blue-500" /> 시스템 설정</h2>
+              <X size={24} cursor="pointer" onClick={() => setShowSettingsModal(false)} className="text-gray-500 hover:text-white" />
+            </div>
+
+            <div style={{display: 'flex', flexDirection: 'column', gap: '20px'}}>
+              {/* 섹션 1: 보안 알림 */}
+              <section>
+                <h3 style={{fontSize: '16px', color: '#3b82f6', marginBottom: '10px', fontWeight: '600'}}>🚨 보안 알림 설정</h3>
+                <div style={{backgroundColor: '#1f2937', padding: '15px', borderRadius: '15px', display: 'flex', flexDirection: 'column', gap: '15px'}}>
+                  <div>
+                    <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '8px'}}>
+                      <span style={{fontSize: '14px'}}>감지 민감도</span>
+                      <span style={{fontSize: '14px', color: '#3b82f6', fontWeight: 'bold'}}>{settings.sensitivity}%</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="1" max="100" 
+                      value={settings.sensitivity} 
+                      onChange={(e) => setSettings({...settings, sensitivity: e.target.value})}
+                      style={{width: '100%', height: '5px', backgroundColor: '#374151', borderRadius: '3px', cursor: 'pointer'}}
+                    />
+                  </div>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                    <span style={{fontSize: '14px'}}>경고음 발생</span>
+                    <button 
+                      onClick={() => setSettings({...settings, enableSound: !settings.enableSound})}
+                      style={{
+                        width: '44px', height: '22px', borderRadius: '11px', 
+                        backgroundColor: settings.enableSound ? '#3b82f6' : '#374151',
+                        position: 'relative', transition: 'all 0.3s ease', border: 'none', cursor: 'pointer'
+                      }}
+                    >
+                      <div style={{
+                        width: '16px', height: '16px', borderRadius: '50%', backgroundColor: 'white',
+                        position: 'absolute', top: '3px', left: settings.enableSound ? '25px' : '3px',
+                        transition: 'all 0.3s ease'
+                      }}></div>
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              {/* 섹션 2: 화면 설정 */}
+              <section>
+                <h3 style={{fontSize: '16px', color: '#3b82f6', marginBottom: '10px', fontWeight: '600'}}>📺 화면 레이아웃</h3>
+                <div style={{display: 'flex', gap: '10px'}}>
+                  <button 
+                    onClick={() => setSettings({...settings, viewMode: 'list'})}
+                    style={{
+                      flex: 1, padding: '15px', borderRadius: '15px', border: settings.viewMode === 'list' ? '2px solid #3b82f6' : '1px solid rgba(255,255,255,0.1)',
+                      backgroundColor: settings.viewMode === 'list' ? 'rgba(59, 130, 246, 0.1)' : '#1f2937', color: 'white', cursor: 'pointer', transition: 'all 0.2s'
+                    }}
+                  >
+                    <div style={{fontSize: '18px', marginBottom: '4px'}}>📋</div>
+                    <div style={{fontSize: '15px', fontWeight: 'bold'}}>목록 형태</div>
+                  </button>
+                  <button 
+                    onClick={() => setSettings({...settings, viewMode: 'map'})}
+                    style={{
+                      flex: 1, padding: '15px', borderRadius: '15px', border: settings.viewMode === 'map' ? '2px solid #3b82f6' : '1px solid rgba(255,255,255,0.1)',
+                      backgroundColor: settings.viewMode === 'map' ? 'rgba(59, 130, 246, 0.1)' : '#1f2937', color: 'white', cursor: 'pointer', transition: 'all 0.2s'
+                    }}
+                  >
+                    <div style={{fontSize: '18px', marginBottom: '4px'}}>🗺️</div>
+                    <div style={{fontSize: '15px', fontWeight: 'bold'}}>지도 형태</div>
+                  </button>
+                </div>
+              </section>
+
+              {/* 섹션 3: 데이터 관리 */}
+              <section>
+                <h3 style={{fontSize: '16px', color: '#3b82f6', marginBottom: '10px', fontWeight: '600'}}>💾 데이터 및 시스템</h3>
+                <div style={{backgroundColor: '#1f2937', padding: '15px', borderRadius: '15px', display: 'flex', flexDirection: 'column', gap: '12px'}}>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                    <span style={{fontSize: '14px'}}>기록 내보내기</span>
+                    <button style={{backgroundColor: 'transparent', border: '1px solid #3b82f6', color: '#3b82f6', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer'}}>파일 다운로드</button>
+                  </div>
+                  <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px'}}>
+                    <span style={{fontSize: '14px'}}>연결 상태</span>
+                    <div style={{display: 'flex', alignItems: 'center', gap: '6px'}}>
+                      <div style={{width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10b981'}}></div>
+                      <span style={{fontSize: '12px', color: '#10b981'}}>정상 (24ms)</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <button 
+              onClick={() => setShowSettingsModal(false)}
+              style={{width: '100%', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '12px', padding: '14px', fontWeight: 'bold', fontSize: '16px', marginTop: '20px', cursor: 'pointer'}}
+            >
+              설정 저장 및 닫기
+            </button>
           </div>
         </div>
       )}

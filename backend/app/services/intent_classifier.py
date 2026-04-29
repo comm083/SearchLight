@@ -186,6 +186,13 @@ class RuleBasedIntentClassifier:
                 if re.search(pattern, query):
                     scores[intent] += 2.0
 
+        # [보정] 특정 날짜나 과거 시점이 언급된 경우 LOCALIZATION(실시간) 의도를 배제
+        past_indicators = [r"\d+월", r"\d+일", "어제", "그저께", "지난", "이전", "전", "아까", "그때"]
+        if any(re.search(p, query) for p in past_indicators):
+            if scores["LOCALIZATION"] > 0:
+                scores["LOCALIZATION"] *= 0.2  # 과거 언급 시 실시간 점수 대폭 삭감
+                scores["SUMMARIZATION"] += 2.0 # 대신 요약/검색 점수 가산
+
         total = sum(scores.values())
         if total == 0:
             # 점수가 0이면 SUMMARIZATION 기본값

@@ -225,11 +225,9 @@ class KoreanTimeParser:
     # ── 날짜 전용 ────────────────────────────────────────────────────
     def _date_only(self, q: str) -> Optional[TimeRange]:
         d = self._base_date(q)
-        # 날짜 관련 키워드가 없으면 None
-        if not any(kw in q for kw in (
-            "어제", "오늘", "내일", "그저께", "그제",
-            "지난주", "저번 주", "지지난주", "이번 주"
-        )):
+        # 날짜 관련 키워드나 'X월' 패턴이 없으면 None
+        date_keywords = ("어제", "오늘", "내일", "그저께", "그제", "지난주", "저번 주", "지지난주", "이번 주")
+        if not any(kw in q for kw in date_keywords) and not re.search(r'\d+\s*월', q):
             return None
         start = datetime.combine(d, time(0, 0))
         end   = datetime.combine(d, time(23, 59))
@@ -238,6 +236,18 @@ class KoreanTimeParser:
     # ─── 헬퍼 ────────────────────────────────────────────────────────
     def _base_date(self, q: str):
         today = self.now.date()
+        
+        # "X월 Y일" 또는 "X월" 패턴 처리
+        m_date = re.search(r'(\d+)\s*월\s*(?:(\d+)\s*일)?', q)
+        if m_date:
+            month = int(m_date.group(1))
+            day = int(m_date.group(2)) if m_date.group(2) else 1
+            # 연도는 현재 연도 사용 (미래 월이면 작년으로 처리하는 로직 등은 생략하고 단순화)
+            try:
+                return today.replace(month=month, day=day)
+            except ValueError:
+                return today
+
         if "그저께" in q or "그제" in q: return today + timedelta(days=-2)
         if "어제" in q:                  return today + timedelta(days=-1)
         if "내일" in q:                  return today + timedelta(days=1)

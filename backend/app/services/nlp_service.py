@@ -13,12 +13,12 @@ class NLPService:
         self.client = OpenAI(api_key=api_key)
         print("[Service] OpenAI NLP 서비스 초기화 완료!")
 
-    def generate_security_report(self, query: str, contexts: list, intent: str = "SUMMARIZATION", is_fallback: bool = False):
+    def generate_security_report(self, query: str, contexts: list, intent: str = "SUMMARIZATION", is_fallback: bool = False, requested_time: str = "알 수 없는 시간"):
         """
         검색된 장면들(contexts)을 바탕으로 의도(intent)에 맞는 자연어 보안 보고서를 생성합니다.
         """
         if not contexts:
-            return "검색된 관련 데이터가 없어 보고서를 생성할 수 없습니다."
+            return f"죄송합니다. 요청하신 {requested_time} 근처에는 기록된 보안 이벤트가 없습니다."
 
         # 검색된 장면들의 프레임별 상세 묘사를 컨텍스트로 사용
         context_items = []
@@ -32,7 +32,7 @@ class NLPService:
         
         fallback_notice = ""
         if is_fallback:
-            fallback_notice = "⚠️ 주의: 사용자가 요청한 '최근' 시간대의 데이터가 없어, 시스템이 보유한 가장 최신 데이터를 바탕으로 분석을 수행했습니다. 이 점을 보고서 서두에 명시하세요.\n"
+            fallback_notice = f"⚠️ [중요 안내]: 사용자가 요청한 '{requested_time}'에 해당하는 검색 결과가 전혀 없습니다. 따라서 시스템이 보유한 가장 유사하거나 최신의 데이터를 대신 가져왔습니다. 보고서 서두에 '요청하신 {requested_time}에는 기록이 없으나, 대신 가장 근접한 데이터를 기반으로 분석한 결과입니다'라는 내용을 반드시 포함하세요.\n"
 
         # 의도별 맞춤 지침
         intent_instructions = {
@@ -45,27 +45,24 @@ class NLPService:
         
         specific_instruction = intent_instructions.get(intent, intent_instructions["SUMMARIZATION"])
 
-        system_prompt = "당신은 지능형 CCTV 보안 관제 시스템 '서치라이트'의 전문 보안 분석관입니다. 가독성이 뛰어나고 데이터에 기반한 정확한 보고서를 작성합니다."
+        system_prompt = "당신은 지능형 CCTV 보안 관제 시스템 '서치라이트'의 전문 보안 분석관입니다. 가독성을 위해 불필요한 미사여구를 제거하고, 핵심 정보만 1~2문장 내외로 매우 간결하게 보고합니다."
         user_prompt = f"""
 {fallback_notice}
-사용자의 질문과 검색된 CCTV 장면 묘사들을 바탕으로 '보안 상황 요약 보고서'를 작성해 주세요.
-현재 분석 의도는 **{intent}**입니다. {specific_instruction}
+사용자의 질문과 CCTV 장면 묘사를 바탕으로 '보안 요약 보고서'를 작성하세요.
+분석 의도는 **{intent}**이며, {specific_instruction}
 
 [사용자 질문]: {query}
+[요청된 시간]: {requested_time}
+[장면 묘사 (실제 검색된 결과)]: {context_text}
 
-[검색된 CCTV 장면 묘사들]:
-{context_text}
-
-[작성 지침]:
-1. 반드시 아래의 5가지 섹션 구조와 지정된 이모지를 사용하여 작성하세요.
-   - 📌 **사건 개요**: 보고 대상 상황 요약
-   - 🔍 **주요 분석**: CCTV에서 포착된 핵심 상황 (데이터에 근거한 구체적 묘사)
-   - 👤 **인물 및 특징**: 의상(색상, 종류), 신체 특징, 행동 등 (**상세 타임라인 데이터에 언급된 내용만 작성**)
-   - 🚨 **위험성 평가**: 보안 위협 수준 (낮음/보통/높음/긴급) 및 근거
-   - 💡 **최종 결론**: 향후 권고 사항 또는 조치 제언
-2. **사실 기반**: 사용자의 질문에 딱 맞는 시간대 데이터가 없더라도, 제공된 데이터 중 가장 최신의 기록을 바탕으로 분석하여 보고하세요.
-3. **주의**: 인물의 의상이나 특징이 명시되지 않았다면 "데이터상 특징 정보 없음"이라고 명시하세요. 절대로 임의로 추측하여 작성하지 마세요.
-4. 각 섹션 사이에는 반드시 한 줄의 빈 줄을 추가하세요.
+[작성 지침 - 매우 중요]:
+1. 반드시 아래의 3가지 섹션만 사용하여 **최대한 짧고 간결하게** 작성하세요.
+   - 📌 **상황 요약**: 현재 상황을 1문장으로 요약
+   - 🔍 **핵심 분석**: 포착된 주요 장면과 특징을 1~2문장으로 요약 (상세 타임라인 근거)
+   - 🚨 **위험 및 조치**: 위험 수준(낮음~긴급)과 필요한 조치 제언
+2. **데이터가 사용자의 요청 시간과 다를 경우(fallback)**, '상황 요약' 섹션 시작 시점에 "요청하신 {requested_time}에는 기록이 없으나, 대신 발견된 가장 근접한 기록(날짜/시간 명시)을 보고합니다."라고 명시하세요.
+3. **[날짜 엄격 준수]**: 사용자의 질문에 언급된 날짜({requested_time})와 실제 [장면 묘사] 데이터의 날짜가 다르다면, 절대 보고서 본문(상황 요약/핵심 분석)에서 사용자의 요청 날짜를 실제인 것처럼 언급하지 마세요. 반드시 **실제 데이터에 찍힌 날짜**만을 사실로 보고해야 합니다.
+4. 각 섹션은 **최대 2문장**을 넘지 마세요.
 5. 마지막은 "분석 완료. 이상입니다."로 마무리하세요.
 """
 
