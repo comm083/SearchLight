@@ -7,7 +7,8 @@
       "Bash(c:\\\\SearchLight\\\\SearchLight\\\\Scripts\\\\pip.exe install *)",
       "PowerShell(& \"c:\\\\SearchLight\\\\SearchLight\\\\Scripts\\\\pip.exe\" install supabase easyocr 2>&1)",
       "Bash(c:/SearchLight/SearchLight/Scripts/python.exe -c ' *)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }

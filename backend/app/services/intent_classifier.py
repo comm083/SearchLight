@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 import re
 import os
+import math
 
 
 # ─── 결과 데이터 클래스 ──────────────────────────────────────────────
@@ -87,6 +88,8 @@ class RuleBasedIntentClassifier:
                 ("보고", 2.5), ("상황", 2.0), ("어떻게 됐", 2.0),
                 ("있었어", 1.5), ("무슨", 1.0), ("내용", 2.0),
                 ("전반적", 2.0), ("히스토리", 2.5), ("기록", 1.5),
+                ("영상", 1.5), ("보여줘", 1.5), ("보여줄래", 1.5),
+                ("오래된", 2.0), ("최신 영상", 2.0), ("최근 영상", 2.0),
                 ("summary", 3.0), ("report", 2.5), ("what happened", 3.0),
             ],
             "regex": [
@@ -191,7 +194,7 @@ class RuleBasedIntentClassifier:
                     scores[intent] += 2.0
 
         # [보정] 특정 날짜나 과거 시점이 언급된 경우 LOCALIZATION(실시간) 의도를 배제
-        past_indicators = [r"\d+월", r"\d+일", "어제", "그저께", "지난", "이전", "전", "아까", "그때"]
+        past_indicators = [r"\d+월", r"\d+일", "어제", "엊그제", "그저께", "지난", "이전", "전", "아까", "그때"]
         if any(re.search(p, query) for p in past_indicators):
             if scores["LOCALIZATION"] > 0:
                 scores["LOCALIZATION"] *= 0.2  # 과거 언급 시 실시간 점수 대폭 삭감
@@ -251,11 +254,32 @@ class FineTunedIntentClassifier:
         try:
             import torch
             from transformers import AutoTokenizer, AutoModelForSequenceClassification
-            
+
             # 절대 경로 확인
             abs_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../", model_path))
             if not os.path.exists(abs_path):
                 print(f"[Warning] 모델 경로를 찾을 수 없습니다: {abs_path}")
+                return
+
+            # 체크포인트에 분류 헤드 가중치가 있는지 먼저 확인
+            import glob as _glob
+            ckpt_files = _glob.glob(os.path.join(abs_path, "*.safetensors")) + \
+                         _glob.glob(os.path.join(abs_path, "pytorch_model.bin"))
+            has_classifier_weights = False
+            if ckpt_files:
+                try:
+                    if ckpt_files[0].endswith(".safetensors"):
+                        from safetensors import safe_open
+                        with safe_open(ckpt_files[0], framework="pt") as f:
+                            has_classifier_weights = any("classifier" in k for k in f.keys())
+                    else:
+                        ckpt = torch.load(ckpt_files[0], map_location="cpu", weights_only=True)
+                        has_classifier_weights = any("classifier" in k for k in ckpt.keys())
+                except Exception:
+                    pass
+
+            if not has_classifier_weights:
+                print("[Warning] 체크포인트에 classifier 가중치 없음 — 규칙 기반 분류기로 대체합니다.")
                 return
 
             self.tokenizer = AutoTokenizer.from_pretrained(abs_path)
@@ -294,7 +318,7 @@ class FineTunedIntentClassifier:
                 scores[l] = 0.0 if math.isnan(val) else val
 
             # [보정 로직 통합] 특정 날짜나 과거 시점이 언급된 경우 LOCALIZATION(실시간) 점수 감점
-            past_indicators = [r"\d+월", r"\d+일", "어제", "그저께", "지난", "이전", "전", "아까", "그때"]
+            past_indicators = [r"\d+월", r"\d+일", "어제", "엊그제", "그저께", "지난", "이전", "전", "아까", "그때"]
             if any(re.search(p, query) for p in past_indicators):
                 if best_intent == "LOCALIZATION":
                     # LOCALIZATION이 1위더라도 점수를 깎고 2위를 검토
@@ -306,6 +330,11 @@ class FineTunedIntentClassifier:
                     scores["LOCALIZATION"] *= 0.1
                     scores["SUMMARIZATION"] += 0.2
 
+            # KoELECTRA 신뢰도가 낮으면 규칙 기반으로 대체
+            if confidence < 0.65 and rule_res.confidence >= 0.50:
+                rule_res.method = f"rule_based:koelectra_low_conf({confidence:.2f})"
+                return rule_res
+
             return IntentResult(
                 intent=best_intent,
                 confidence=confidence,
@@ -316,9 +345,6 @@ class FineTunedIntentClassifier:
         except Exception as e:
             print(f"[Error] KoELECTRA 추론 오류: {e}")
             return self.fallback_clf.classify(query)
-
-import math
-
 
 
 # ─────────────────────────────────────────────────────────────────────
