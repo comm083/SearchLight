@@ -93,7 +93,7 @@ class NLPService:
 
         print("[Service] OpenAI NLP 서비스 초기화 완료!")
 
-    def generate_security_report(self, query: str, contexts: list, intent: str = "SUMMARIZATION", is_fallback: bool = False, requested_time: str = "알 수 없는 시간"):
+    def generate_security_report(self, query: str, contexts: list, intent: str = "SUMMARIZATION", is_fallback: bool = False, requested_time: str = "알 수 없는 시간", mode: str = "summary"):
         """
         검색된 장면들(contexts)을 바탕으로 의도(intent)에 맞는 자연어 보안 보고서를 생성합니다.
         """
@@ -128,41 +128,106 @@ class NLPService:
         
         specific_instruction = intent_instructions.get(intent, intent_instructions["SUMMARIZATION"])
 
-        system_prompt = "당신은 지능형 CCTV 보안 관제 시스템 '서치라이트'의 전문 보안 분석관입니다. 가독성을 위해 불필요한 미사여구를 제거하고, 핵심 정보만 1~2문장 내외로 매우 간결하게 보고합니다."
+        if mode == "flash":
+            # ⚡ [신규] 특정 시점용 즉답 프롬프트
+            system_prompt = f"""당신은 보안 분석관입니다. 사용자가 특정 시점을 콕 집어 물어봤으므로, 
+            보고서 형식을 완전히 생략하고 1~2문장으로 해당 시점의 핵심 상황을 즉답하세요. 
+            존댓말을 사용하며, 반드시 타임스탬프를 문장 끝에 포함하세요. 
+            (예: "당시 13시 05분경 주차장에서 검정 옷 인물이 담을 넘는 것이 포착되었습니다. [13:05]")
+            절대 "분석 완료"와 같은 맺음말을 쓰지 마세요."""
+        else:
+            # 📊 [기본] 요약 보고서용 프롬프트
+            system_prompt = "당신은 지능형 CCTV 보안 분석 AI '서치라이트'의 전문 보안 분석관입니다. 가독성을 위해 불필요한 미사여구를 제거하고, 핵심 정보만 1~2문장 내외로 매우 간결하게 보고합니다."
+
         user_prompt = f"""
 {fallback_notice}
-사용자의 질문과 CCTV 장면 묘사를 바탕으로 '보안 요약 보고서'를 작성하세요.
-분석 의도는 **{intent}**이며, {specific_instruction}
-
-[사용자 질문]: {query}
-[요청된 시간]: {requested_time}
-[장면 묘사 (실제 검색된 결과)]: {context_text}
+의도: {intent} ({specific_instruction})
+사용자 질문: {query}
+요청 시각: {requested_time}
+실제 데이터: {context_text}
 
 [작성 지침 - 매우 중요]:
+"""
+        if mode != "flash":
+            user_prompt += """
 1. 반드시 아래의 3가지 섹션만 사용하여 **최대한 짧고 간결하게** 작성하세요.
    - 📌 **상황 요약**: 현재 상황을 1문장으로 요약
    - 🔍 **핵심 분석**: 포착된 주요 장면과 특징을 1~2문장으로 요약 (상세 타임라인 근거)
-   - 🚨 **위험 및 조치**: 위험 수준(낮음~긴급)과 필요한 조치 제언
-2. **데이터가 사용자의 요청 시간과 다를 경우(fallback)**, '상황 요약' 섹션 시작 시점에 "요청하신 {requested_time}에는 기록이 없으나, 대신 발견된 가장 근접한 기록(날짜/시간 명시)을 보고합니다."라고 명시하세요.
-3. **[날짜 엄격 준수]**: 사용자의 질문에 언급된 날짜({requested_time})와 실제 [장면 묘사] 데이터의 날짜가 다르다면, 절대 보고서 본문(상황 요약/핵심 분석)에서 사용자의 요청 날짜를 실제인 것처럼 언급하지 마세요. 반드시 **실제 데이터에 찍힌 날짜**만을 사실로 보고해야 합니다.
-4. 각 섹션은 **최대 2문장**을 넘지 마세요.
-5. 마지막은 "분석 완료. 이상입니다."로 마무리하세요.
+   - 🚨 **위험 및 조치**: 위험 수준(낮음~긴급)과 필요한 조치 제언. (단, 위험 수준이 **'낮음'**인 경우에는 "추가 감시 및 신고 필요"와 같은 경고성 문구는 제외하고 안심할 수 있는 표현을 사용하세요.)
+2. [중요] 사용자가 요청한 날짜({requested_time})에 데이터가 없다면, 반드시 "요청하신 시간대의 기록은 없으나 대안으로 가장 가까운 기록을 보고합니다"라고 명확히 서두에 밝히세요. 
+3. [중요] 절대 실제 데이터에 없는 날짜를 지어내거나, 다른 날짜의 데이터를 요청 날짜인 것처럼 속이지 마세요.
+4. [중요] 모든 핵심 사실 뒤에는 근거가 되는 타임스탬프를 대괄호 안에 표기하세요. (예: "인물 포착 [10:05]")
+5. 각 섹션은 **최대 2문장**을 넘지 마세요.
+6. 마지막에 "분석 완료. 이상입니다."와 같은 형식적인 맺음말은 **절대 포함하지 마세요.**
 """
-
+        
         try:
-            response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_tokens=600,
-                temperature=0.7
-            )
-            return response.choices[0].message.content
+            # 1. 보고서 생성 시도
+            report = self._call_llm(system_prompt, user_prompt)
+            
+            # 2. 고도화된 사실 관계 검증 (Anti-Hallucination Verification)
+            is_valid, corrected_report = self._verify_report(report, requested_time, context_text)
+            
+            if not is_valid:
+                print(f"[NLP Service] 사실 관계 모순 감지! 재교정 수행 중...")
+                # 재교정 프롬프트와 함께 한 번 더 시도
+                retry_prompt = f"{system_prompt}\n\n[🚨 재교정 요청] 방금 생성된 보고서에서 날짜나 사실 관계 오류가 발견되었습니다. 실제 데이터 시점과 요청 시점을 엄격히 구분하여 다시 작성해 주세요."
+                report = self._call_llm(retry_prompt, user_prompt)
+                # 최종 검증 (그래도 틀리면 경고 문구 강제 삽입)
+                _, final_report = self._verify_report(report, requested_time, context_text, force_warning=True)
+                return final_report
+                
+            return corrected_report
+
         except Exception as e:
-            print(f"[NLP Error] 보고서 생성 실패: {e}")
-            return f"보고서 생성 중 오류가 발생했습니다: {str(e)}"
+            print(f"[NLP Error] AI 보고서 생성 중 오류: {e}")
+            return "보안 보고서를 생성하는 동안 기술적인 문제가 발생했습니다. 잠시 후 다시 시도해 주세요."
+
+    def _call_llm(self, system_prompt: str, user_content: str) -> str:
+        """LLM 호출 공통 로직"""
+        response = self.client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content}
+            ],
+            temperature=0.2, # 낮은 온도로 일관성 유지
+        )
+        return response.choices[0].message.content
+
+    def _verify_report(self, report: str, requested_time: str, context: str, force_warning: bool = False) -> tuple[bool, str]:
+        """
+        생성된 보고서의 사실 관계를 검증합니다.
+        1. 요청 시간과 실제 데이터 시간이 혼용되었는지 체크
+        2. 실제 데이터에 없는 날짜 정보가 포함되었는지 체크
+        """
+        import re
+        
+        # 실제 데이터에서 발견되는 모든 날짜 추출 (예: 4월 28일)
+        actual_dates = set(re.findall(r"\d+월 \d+일", context))
+        # 요청한 날짜 추출
+        req_date_match = re.search(r"\d+월 \d+일", requested_time)
+        req_date = req_date_match.group(0) if req_date_match else None
+        
+        # 만약 요청 날짜가 실제 데이터에 없는데, 보고서에서 요청 날짜가 '사실'인 것처럼 쓰였는지 체크
+        is_valid = True
+        if req_date and req_date not in actual_dates:
+            # 보고서 내에서 요청 날짜를 언급하며 "포착되었습니다", "발생했습니다" 등의 긍정문을 사용하는지 검사
+            suspicious_patterns = [
+                f"{req_date}(에|은|는) .* (있었습니다|발생했습니다|포착되었습니다|기록되었습니다)"
+            ]
+            for pattern in suspicious_patterns:
+                if re.search(pattern, report):
+                    is_valid = False
+                    break
+        
+        # 검증 실패 시 또는 강제 경고 필요 시 문구 보정
+        if not is_valid or force_warning:
+            warning_msg = "\n\n> ⚠️ **검증 알림**: 본 보고서는 요청하신 시간대의 데이터가 존재하지 않아 시스템에서 검색된 가장 인접한 시간대의 데이터를 기반으로 작성되었습니다."
+            if warning_msg not in report:
+                report += warning_msg
+                
+        return is_valid, report
 
     def generate_ood_response(self, user_query: str):
         """

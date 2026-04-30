@@ -1,32 +1,26 @@
+import os
+import shutil
+from typing import List, Optional
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-import os
-import shutil
 
-# 서비스 모듈들 임포트 (통합)
-from app.services.vector_db_service import vector_db_service
-from app.services.intent_classifier import intent_service
+from app.schemas import SearchRequest, SearchResponse, HistoryResponse, AlertSimulationRequest
+from app.services.search_manager import search_manager
 from app.services.database import db_service
-from app.services.korean_time_parser import KoreanTimeParser
 from app.services.nlp_service import nlp_service
 from app.services.alert_service import alert_service
 from app.services.image_search_service import image_search_service
 
-app = FastAPI(title="SearchLight CCTV 통합 검색 API", version="2.4")
+app = FastAPI(title="SearchLight CCTV 통합 검색 API", version="3.0")
 
-# 전역 대화 메모리 (세션별 저장)
-SESSION_MEMORY = {}
-time_parser = KoreanTimeParser()
-
-# 정적 파일(이미지) 서빙 설정
+# 정적 파일 서빙
 static_path = os.path.join(os.path.dirname(__file__), "..", "static")
 if not os.path.exists(static_path):
     os.makedirs(static_path)
 app.mount("/static", StaticFiles(directory=static_path), name="static")
 
-# CORS 설정 (프론트엔드의 접근을 허용)
+# CORS 설정
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -35,28 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from typing import Optional
-
-class SearchRequest(BaseModel):
-    query: str
-    top_k: int = 2
-    session_id: str = "default"
-    start_time: Optional[str] = None
-    end_time: Optional[str] = None
-
-# 5가지 의도별 맞춤 응답 메시지
-INTENT_MESSAGES = {
-    "COUNTING":     "대상에 대한 수량 집계를 완료했습니다.",
-    "SUMMARIZATION": "해당 시간대의 보안 상황을 요약하여 보고합니다.",
-    "LOCALIZATION":  "현재 실시간 위치 및 상태를 확인합니다.",
-    "BEHAVIORAL":    "이상 행동 분석 및 검색 결과를 보고합니다.",
-    "CAUSAL":        "이벤트 발생 원인 및 인과 관계를 분석합니다.",
-    "EMERGENCY":     "🚨 긴급 상황이 감지되었습니다. 즉시 관계자에게 연락하고 해당 구역을 확인해 주세요.",
-    "ERROR":         "⚠️ 시스템 장애 관련 문의입니다. 카메라 연결 상태를 점검해 주세요.",
-    "GENERAL":       "💬 일반 대화로 분류되었습니다. 보안 질문을 입력해 주세요.",
-}
-
-@app.post("/api/search")
+@app.post("/api/search", response_model=SearchResponse)
 async def process_user_query(request: SearchRequest):
     query_text = request.query
     session_id = request.session_id
@@ -240,72 +213,75 @@ async def process_user_query(request: SearchRequest):
         ai_report=response_data.get("ai_report") or response_data.get("answer")
     )
 
-    return response_data
-
-@app.get("/api/history/{session_id}")
+@app.get("/api/history/{session_id}", response_model=HistoryResponse)
 async def get_history(session_id: str):
-    """
-    사용자의 이전 검색 기록을 가져옵니다.
-    """
-    history = db_service.get_search_history(session_id)
+    """사용자의 이전 검색 기록 조회"""
     return {
         "status": "success",
-        "history": history
+        "history": db_service.get_search_history(session_id)
     }
 
-# 🚨 [신규] 실시간 이상 행동 시뮬레이션 엔드포인트
+@app.delete("/api/history/{history_id}")
+async def delete_history(history_id: str):
+    """특정 검색 기록 삭제"""
+    success = db_service.delete_search_history(history_id)
+    if success:
+        return {"status": "success", "message": "기록이 삭제되었습니다."}
+    return {"status": "error", "message": "삭제 실패"}
+
 @app.post("/api/alerts/simulate")
-async def simulate_realtime_event(description: str, image_path: Optional[str] = None):
-    """
-    CCTV 시스템에서 새로운 이벤트가 감지된 상황을 시뮬레이션합니다.
-    """
-    alert = alert_service.process_new_event(description, image_path)
+async def simulate_realtime_event(request: AlertSimulationRequest):
+    """이상 행동 시뮬레이션"""
+    alert = alert_service.process_new_event(request.description, request.image_path)
     if alert:
-        return {
-            "status": "alert",
-            "message": "[위험] 상황이 감지되었습니다!",
-            "data": alert
-        }
-    return {
-        "status": "normal",
-        "message": "감지된 이상 행동이 없습니다."
-    }
+        return {"status": "alert", "message": "[위험] 상황 감지!", "data": alert}
+    return {"status": "normal", "message": "정상 상황"}
 
-# 🚨 [신규] 최신 알림 목록 조회
 @app.get("/api/alerts/latest")
 async def get_latest_alerts():
+    """최신 알림 목록 조회"""
     return alert_service.get_latest_alerts()
 
-# 📸 [신규] 이미지 기반 유사 인물 검색 API
+@app.post("/api/stt")
+async def speech_to_text(file: UploadFile = File(...)):
+    """OpenAI Whisper를 사용한 음성 인식"""
+    temp_dir = os.path.join(os.path.dirname(__file__), "..", "temp")
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
+        
+    temp_file_path = os.path.join(temp_dir, f"stt_{file.filename}")
+    try:
+        with open(temp_file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        text = nlp_service.transcribe_audio(temp_file_path)
+        return {"status": "success", "text": text}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+    finally:
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+
 @app.post("/api/search/image")
 async def search_by_image(file: UploadFile = File(...), top_k: int = 3):
-    """
-    사용자가 업로드한 이미지를 기반으로 유사한 CCTV 장면을 검색합니다.
-    """
-    # 임시 파일 저장 경로
+    """이미지 기반 유사 장면 검색"""
     temp_dir = os.path.join(os.path.dirname(__file__), "..", "temp")
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
         
     temp_file_path = os.path.join(temp_dir, file.filename)
-    
     try:
-        # 파일 저장
         with open(temp_file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-            
-        # 이미지 검색 수행
         results = image_search_service.search(temp_file_path, top_k=top_k)
-        
         return {
             "status": "success",
-            "message": f"이미지 기반 유사도 검색 결과 {len(results)}건을 발견했습니다.",
+            "message": f"검색 결과 {len(results)}건 발견",
             "results": results
         }
     except Exception as e:
-        return {"status": "error", "message": f"이미지 검색 중 오류 발생: {str(e)}"}
+        return {"status": "error", "message": str(e)}
     finally:
-        # 임시 파일 삭제
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
 

@@ -25,6 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 import re
+import os
 
 
 # ─── 결과 데이터 클래스 ──────────────────────────────────────────────
@@ -118,7 +119,7 @@ class RuleBasedIntentClassifier:
                 ("불", 3.5), ("방화", 3.5), ("화재", 3.5), ("연기", 3.0),
                 ("싸움", 3.5), ("폭행", 3.5), ("때림", 3.0), ("멱살", 3.0),
                 ("절도", 3.5), ("훔침", 3.5), ("몰래 넣", 3.5),
-                ("사건", 2.5), ("사고", 3.0),
+                ("사건", 2.5), ("사고", 3.0), ("문제", 2.5), ("특이사항", 3.0), ("별일", 2.5),
             ],
             "regex": [
                 r"(수상|의심|이상한|낯선|특이).*(사람|인물|남자|여자|차|행동)",
@@ -150,6 +151,8 @@ class RuleBasedIntentClassifier:
                 ("weather", 3.0), ("hello", 3.0), ("hi", 3.0), ("how are you", 2.5),
                 ("who are you", 2.0), ("what is your name", 2.0),
                 ("넌 뭐야", 2.5), ("도와줘", 1.0),
+                ("넌", 1.5), ("너는", 1.5), ("어떻게 돼", 2.0), ("말하면", 1.5),
+                ("시스템", 1.5), ("분석관", 1.5),
             ],
             "regex": [
                 r"(안녕|하이|방가).*",
@@ -157,6 +160,7 @@ class RuleBasedIntentClassifier:
                 r".*(날씨|기분|배고|졸려).*",
                 r"(hello|hi|hey).*",
                 r".*weather.*",
+                r"(넌|너는|너의).*(뭐|어떻게|누구).*",
             ],
             "db_route": "none",
         },
@@ -219,6 +223,102 @@ class RuleBasedIntentClassifier:
             db_route=self.ROUTE_MAP[best_intent],
             method="rule_based"
         )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# 방식 B: KoELECTRA 파인튜닝 분류기 (실제 서비스용)
+# ─────────────────────────────────────────────────────────────────────
+class FineTunedIntentClassifier:
+    """
+    학습된 KoELECTRA 모델을 사용하여 의도를 분류합니다.
+    모델 로드 실패 시 RuleBasedIntentClassifier를 내부적으로 사용합니다.
+    """
+    def __init__(self, model_path: str = "model/koelectra_finetuned"):
+        self.model_path = model_path
+        self.labels = ["COUNTING", "SUMMARIZATION", "LOCALIZATION", "BEHAVIORAL", "CAUSAL"]
+        self.route_map = {
+            "COUNTING":      "sqlite_count",
+            "SUMMARIZATION": "vector_rag",
+            "LOCALIZATION":  "sqlite_latest",
+            "BEHAVIORAL":    "event_rag",
+            "CAUSAL":        "sqlite_and_rag",
+        }
+        self.fallback_clf = RuleBasedIntentClassifier()
+        self.model = None
+        self.tokenizer = None
+        
+        # 모델 로드 시도
+        try:
+            import torch
+            from transformers import AutoTokenizer, AutoModelForSequenceClassification
+            
+            # 절대 경로 확인
+            abs_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../", model_path))
+            if not os.path.exists(abs_path):
+                print(f"[Warning] 모델 경로를 찾을 수 없습니다: {abs_path}")
+                return
+
+            self.tokenizer = AutoTokenizer.from_pretrained(abs_path)
+            self.model = AutoModelForSequenceClassification.from_pretrained(abs_path)
+            self.model.eval()
+            print(f"[Service] KoELECTRA 파인튜닝 모델 로드 완료! ({model_path})")
+        except Exception as e:
+            print(f"[Warning] KoELECTRA 모델 로드 실패 (규칙 기반으로 대체): {e}")
+
+    def classify(self, query: str) -> IntentResult:
+        # 1. 일상 대화 키워드 강제 체크 (모델 오판 방지용 예외 필터)
+        # "넌", "너는", "어떻게 돼" 등 시스템 지칭 키워드가 있으면 모델 추론 전 CHITCHAT 우선 처리
+        rule_res = self.fallback_clf.classify(query)
+        if rule_res.intent == "CHITCHAT" and rule_res.confidence >= 0.4:
+            return rule_res
+
+        # 2. 모델이 로드되지 않았으면 규칙 기반으로 수행
+        if self.model is None or self.tokenizer is None:
+            return rule_res
+
+        try:
+            import torch
+            inputs = self.tokenizer(query, return_tensors="pt", truncation=True, max_length=128)
+            with torch.no_grad():
+                logits = self.model(**inputs).logits
+            
+            probs = torch.softmax(logits, dim=-1)[0]
+            pred_idx = torch.argmax(probs).item()
+            best_intent = self.labels[pred_idx]
+            confidence = probs[pred_idx].item()
+            if math.isnan(confidence): confidence = 0.0
+            
+            scores = {}
+            for i, l in enumerate(self.labels):
+                val = probs[i].item()
+                scores[l] = 0.0 if math.isnan(val) else val
+
+            # [보정 로직 통합] 특정 날짜나 과거 시점이 언급된 경우 LOCALIZATION(실시간) 점수 감점
+            past_indicators = [r"\d+월", r"\d+일", "어제", "그저께", "지난", "이전", "전", "아까", "그때"]
+            if any(re.search(p, query) for p in past_indicators):
+                if best_intent == "LOCALIZATION":
+                    # LOCALIZATION이 1위더라도 점수를 깎고 2위를 검토
+                    scores["LOCALIZATION"] *= 0.1
+                    best_intent = max(scores, key=scores.get)
+                    confidence = scores[best_intent]
+                else:
+                    # 이미 다른 의도라면 점수만 보정
+                    scores["LOCALIZATION"] *= 0.1
+                    scores["SUMMARIZATION"] += 0.2
+
+            return IntentResult(
+                intent=best_intent,
+                confidence=confidence,
+                scores=scores,
+                db_route=self.route_map.get(best_intent, "vector_rag"),
+                method="koelectra_finetuned"
+            )
+        except Exception as e:
+            print(f"[Error] KoELECTRA 추론 오류: {e}")
+            return self.fallback_clf.classify(query)
+
+import math
+
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -419,4 +519,6 @@ if __name__ == "__main__":
     run_full_pipeline_demo()
 
 # 서비스 인스턴스 생성 (백엔드 통합용)
-intent_service = RuleBasedIntentClassifier()
+# 모델 폴더가 있으면 FineTunedIntentClassifier를 사용하고, 없으면 RuleBased를 사용합니다.
+intent_service = FineTunedIntentClassifier(model_path="model/koelectra_finetuned")
+

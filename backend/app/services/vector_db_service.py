@@ -28,8 +28,6 @@ class VectorDBService:
 
     def _build_index(self):
         try:
-    def _build_index(self):
-        try:
             # 1. 실제 비디오 상세 데이터 로드 (frames 컬럼이 없을 수 있으므로 유연하게 처리)
             video_resp = self.supabase.table('cctv_videos').select('*').execute()
             video_map = {str(v['id']): v for v in (video_resp.data or [])}
