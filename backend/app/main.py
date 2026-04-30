@@ -1,16 +1,29 @@
 import os
 import shutil
-from typing import List, Optional
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.schemas import SearchRequest, SearchResponse, HistoryResponse, AlertSimulationRequest
-from app.services.search_manager import search_manager
 from app.services.database import db_service
 from app.services.nlp_service import nlp_service
 from app.services.alert_service import alert_service
 from app.services.image_search_service import image_search_service
+from app.services.intent_classifier import intent_service
+from app.services.vector_db_service import vector_db_service
+from app.services.korean_time_parser import KoreanTimeParser
+
+time_parser = KoreanTimeParser()
+SESSION_MEMORY = {}
+INTENT_MESSAGES = {
+    "GENERAL": "일반 검색 결과를 표시합니다.",
+    "SUMMARIZATION": "요약 정보를 표시합니다.",
+    "BEHAVIORAL": "행동/동선 검색 결과를 표시합니다.",
+    "CAUSAL": "원인/상황 분석 결과를 표시합니다.",
+    "COUNTING": "계측/카운팅 결과를 표시합니다.",
+    "LOCALIZATION": "위치 추적 결과를 표시합니다.",
+    "CHITCHAT": "대화 응답을 표시합니다."
+}
 
 app = FastAPI(title="SearchLight CCTV 통합 검색 API", version="3.0")
 
@@ -44,7 +57,6 @@ async def process_user_query(request: SearchRequest):
     # 2. NLP 전처리: 문장 교정 → 관점별 재작성 → 의도 분류 (KoELECTRA)
     preprocess = nlp_service.preprocess_query(query_text)
     corrected_query = preprocess["corrected"]
-    search_query = preprocess["best_query"]   # FAISS 검색에 사용할 최적 쿼리
 
     # 2-1. 규칙 기반 의도 분류 (라우팅용)
     intent_result = intent_service.classify(corrected_query)
@@ -67,6 +79,9 @@ async def process_user_query(request: SearchRequest):
                 "confidence": getattr(intent_result, 'confidence', 0),
                 "method": getattr(intent_result, 'method', 'direct')
             },
+            "time_info": {"start_time": None, "end_time": None, "raw": "전체"},
+            "context_used": False,
+            "response_mode": "summary",
             "answer": answer,
             "results": [],
             "ai_report": None
@@ -124,6 +139,7 @@ async def process_user_query(request: SearchRequest):
         },
         "time_info": time_info,
         "context_used": context_used,
+        "response_mode": "summary",
         "results": [],
         "ai_report": None
     }
@@ -207,11 +223,13 @@ async def process_user_query(request: SearchRequest):
 
     # 최종 로그 기록 (AI 보고서 포함)
     db_service.log_search(
-        query=query_text, 
-        intent=current_intent, 
+        query=query_text,
+        intent=current_intent,
         session_id=session_id,
         ai_report=response_data.get("ai_report") or response_data.get("answer")
     )
+
+    return response_data
 
 @app.get("/api/history/{session_id}", response_model=HistoryResponse)
 async def get_history(session_id: str):

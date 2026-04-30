@@ -154,11 +154,10 @@ class NLPService:
    - 📌 **상황 요약**: 현재 상황을 1문장으로 요약
    - 🔍 **핵심 분석**: 포착된 주요 장면과 특징을 1~2문장으로 요약 (상세 타임라인 근거)
    - 🚨 **위험 및 조치**: 위험 수준(낮음~긴급)과 필요한 조치 제언. (단, 위험 수준이 **'낮음'**인 경우에는 "추가 감시 및 신고 필요"와 같은 경고성 문구는 제외하고 안심할 수 있는 표현을 사용하세요.)
-2. [중요] 사용자가 요청한 날짜({requested_time})에 데이터가 없다면, 반드시 "요청하신 시간대의 기록은 없으나 대안으로 가장 가까운 기록을 보고합니다"라고 명확히 서두에 밝히세요. 
-3. [중요] 절대 실제 데이터에 없는 날짜를 지어내거나, 다른 날짜의 데이터를 요청 날짜인 것처럼 속이지 마세요.
-4. [중요] 모든 핵심 사실 뒤에는 근거가 되는 타임스탬프를 대괄호 안에 표기하세요. (예: "인물 포착 [10:05]")
-5. 각 섹션은 **최대 2문장**을 넘지 마세요.
-6. 마지막에 "분석 완료. 이상입니다."와 같은 형식적인 맺음말은 **절대 포함하지 마세요.**
+2. [중요] 절대 실제 데이터에 없는 날짜를 지어내거나, 다른 날짜의 데이터를 요청 날짜인 것처럼 속이지 마세요.
+3. [중요] 모든 핵심 사실 뒤에는 근거가 되는 타임스탬프를 대괄호 안에 표기하세요. (예: "인물 포착 [10:05]")
+4. 각 섹션은 **최대 2문장**을 넘지 마세요.
+5. 마지막에 "분석 완료. 이상입니다."와 같은 형식적인 맺음말은 **절대 포함하지 마세요.**
 """
         
         try:
@@ -228,6 +227,36 @@ class NLPService:
                 report += warning_msg
                 
         return is_valid, report
+
+    def preprocess_query(self, query: str) -> dict:
+        """
+        쿼리 전처리: 문장 교정 후 FAISS 검색용 최적 쿼리 반환
+        Returns: {"corrected": str, "best_query": str}
+        """
+        # KoBART 교정 시도
+        corrected = query
+        if _HAS_KOBART:
+            try:
+                corrected = _correct_stt_text(query) or query
+            except Exception as e:
+                print(f"[NLP] KoBART 교정 실패: {e}")
+
+        return {
+            "corrected": corrected,
+            "best_query": corrected,
+        }
+
+    def transcribe_audio(self, file_path: str) -> str:
+        """OpenAI Whisper를 사용한 음성 인식"""
+        if not self.client:
+            raise RuntimeError("OpenAI API 키가 설정되지 않았습니다.")
+        with open(file_path, "rb") as f:
+            result = self.client.audio.transcriptions.create(
+                model="whisper-1",
+                file=f,
+                language="ko"
+            )
+        return result.text
 
     def generate_ood_response(self, user_query: str):
         """

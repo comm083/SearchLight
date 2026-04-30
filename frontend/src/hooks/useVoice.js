@@ -68,7 +68,17 @@ export const useVoice = (onResult) => {
   const speak = (text) => {
     if (!window.speechSynthesis || !text) return;
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
+    const cleanText = text
+      .replace(/\*\*?(.*?)\*\*?/g, '$1')                      // **bold** / *italic*
+      .replace(/#{1,6}\s?/g, '')                               // ## 헤더
+      .replace(/[_~`>|]/g, '')                                 // 나머지 마크다운 기호
+      .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')                  // 이모지 (보조 평면)
+      .replace(/[\u{2600}-\u{27BF}]/gu, '')                    // 기호·돋보기·화살표 등
+      .replace(/[\u{FE00}-\u{FEFF}]/gu, '')                    // variation selector
+      .replace(/\n{2,}/g, '. ')                                // 빈 줄 → 문장 구분
+      .replace(/\n/g, ' ')
+      .trim();
+    const utterance = new SpeechSynthesisUtterance(cleanText);
     utterance.lang = 'ko-KR';
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
