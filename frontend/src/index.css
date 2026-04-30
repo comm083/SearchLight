@@ -383,81 +383,76 @@ body {
   font-weight: bold;
 }
 
-/* Login Modal */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
+/* Input Area */
+.input-container {
+  padding: 40px;
+  display: flex;
+  justify-content: center;
+}
+
+.input-wrapper {
   width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(5px);
+  max-width: 800px;
+  background-color: #1f2937;
+  border-radius: 16px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: fadeIn 0.3s ease-out;
+  padding: 8px 15px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
 }
 
-.modal-content {
-  background-color: #1f2937;
-  padding: 30px;
-  border-radius: 20px;
-  width: 100%;
-  max-width: 400px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-  animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.modal-title {
-  font-size: 20px;
-  font-weight: 600;
-  margin-bottom: 20px;
-  text-align: center;
-}
-
-.modal-input {
-  width: 100%;
-  background-color: #111827;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 12px 15px;
+.input-wrapper input {
+  flex: 1;
+  background: transparent;
+  border: none;
   color: white;
-  margin-bottom: 20px;
+  padding: 12px;
   outline: none;
   font-size: 15px;
 }
 
-.modal-input:focus {
-  border-color: #3b82f6;
-}
-
-.modal-buttons {
-  display: flex;
-  gap: 10px;
-}
-
-.modal-btn {
-  flex: 1;
-  padding: 12px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-weight: 600;
+.icon-btn {
+  background: transparent;
   border: none;
+  color: #9ca3af;
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 8px;
   transition: all 0.2s;
 }
 
-.modal-btn.cancel {
+.icon-btn:hover {
   background-color: #374151;
-  color: #9ca3af;
+  color: white;
 }
 
-.modal-btn.confirm {
+.send-btn {
   background-color: #3b82f6;
   color: white;
 }
 
-.modal-btn.confirm:hover {
+.send-btn:hover {
   background-color: #2563eb;
+}
+
+/* Profiles */
+.user-profile {
+  margin-top: auto;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  background-color: #8b5cf6;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
 }

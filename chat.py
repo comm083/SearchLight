@@ -169,6 +169,7 @@ def main():
             print(f"  [{label}] {text}")
 
         # Step 3: 각 관점별 의도 분류 → 가장 높은 신뢰도로 진행 (KoELECTRA)
+        # 의도: 시간 / 사람 수 / 행동 / 정보 요약 / 오류 감지
         best_query = corrected_text
         best_intent = None
         best_confidence = -1
