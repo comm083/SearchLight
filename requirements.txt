@@ -15,3 +15,4 @@ tqdm==4.67.3
 sentencepiece
 supabase
 easyocr
+pydantic-settings

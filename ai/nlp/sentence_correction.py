@@ -2,6 +2,8 @@ import re
 import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
+from ai.core.model_manager import model_manager
+
 # 모델과 토크나이저를 전역적으로 관리합니다.
 _model = None
 _tokenizer = None
@@ -15,6 +17,7 @@ def _get_model_and_tokenizer():
             model_id = "theSOL1/kogrammar-distil"
             _tokenizer = AutoTokenizer.from_pretrained(model_id)
             _model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
+            _model.to(model_manager.get_device())
         except Exception as e:
             print(f"Error loading KoBART model: {e}")
             return None, None
@@ -71,7 +74,7 @@ def correct_stt_text(stt_text: str) -> str:
     if model and tokenizer:
         try:
             # 모델 입력 준비
-            input_ids = tokenizer.encode(corrected_text, return_tensors="pt")
+            input_ids = tokenizer.encode(corrected_text, return_tensors="pt").to(model_manager.get_device())
             
             # 문장 생성 (교정 수행)
             outputs = model.generate(
