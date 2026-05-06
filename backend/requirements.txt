@@ -16,3 +16,4 @@ faiss-cpu
 pandas
 python-multipart
 supabase
+opencv-python
