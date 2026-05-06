@@ -6,6 +6,8 @@ const EventHistory = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
+  const [filterTime, setFilterTime] = useState('all');
+
   useEffect(() => {
     fetchEvents();
   }, []);
@@ -24,10 +26,51 @@ const EventHistory = () => {
     }
   };
 
-  const filteredEvents = events.filter(e => 
-    e.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    e.location.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredEvents = events.filter(e => {
+    const matchesSearch = e.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          e.location.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    if (!matchesSearch) return false;
+
+    if (filterTime !== 'all') {
+      const formattedEventDate = e.timestamp ? e.timestamp.split('T')[0].split(' ')[0] : '';
+      return formattedEventDate === filterTime;
+    }
+    
+    return true;
+  });
+
+  const handleDownload = () => {
+    if (filteredEvents.length === 0) {
+      alert("다운로드할 이벤트가 없습니다.");
+      return;
+    }
+
+    const headers = ["ID", "이벤트 내용", "위치", "발생 시각", "대상", "신뢰도(%)"];
+    
+    const csvRows = filteredEvents.map(e => {
+      const targetLabel = e.tag === 'Person' ? '사람' : e.tag === 'Vehicle' ? '차량' : (e.tag || '이벤트');
+      return [
+        e.id || '',
+        `"${(e.title || '').replace(/"/g, '""')}"`,
+        `"${e.location || ''}"`,
+        `"${e.timestamp || ''}"`,
+        targetLabel,
+        e.confidence || ''
+      ].join(',');
+    });
+
+    const csvContent = "\uFEFF" + headers.join(',') + "\n" + csvRows.join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `보안이벤트_보고서_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div style={{ padding: '30px 40px', maxWidth: '1200px', margin: '0 auto', width: '100%', color: '#f3f4f6' }}>
@@ -36,7 +79,7 @@ const EventHistory = () => {
           <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 8px 0', color: '#fff' }}>영상 보관함</h1>
           <p style={{ color: '#9ca3af', margin: 0, fontSize: '14px' }}>감지된 모든 보안 이벤트 영상을 조회하고 검색합니다.</p>
         </div>
-        <button style={{ backgroundColor: '#60a5fa', color: '#0f172a', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }} onClick={() => alert('보고서 다운로드 기능은 준비 중입니다.')}>
+        <button style={{ backgroundColor: '#60a5fa', color: '#0f172a', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }} onClick={handleDownload}>
           <Download size={16} /> 다운로드
         </button>
       </div>
@@ -52,11 +95,30 @@ const EventHistory = () => {
             style={{ width: '100%', backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '12px 16px 12px 42px', color: '#fff', fontSize: '14px', outline: 'none' }}
           />
         </div>
-        <button style={{ backgroundColor: '#1e293b', border: '1px solid #334155', color: '#fff', padding: '0 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-          <Calendar size={16} color="#9ca3af" /> 오늘
-        </button>
-        <button style={{ backgroundColor: '#1e293b', border: '1px solid #334155', color: '#fff', padding: '0 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-          <Filter size={16} color="#9ca3af" /> 모든 이벤트
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <input 
+            type="date"
+            value={filterTime !== 'all' ? filterTime : ''}
+            onChange={(e) => setFilterTime(e.target.value || 'all')}
+            style={{ 
+              backgroundColor: filterTime !== 'all' ? 'rgba(59, 130, 246, 0.2)' : '#1e293b', 
+              border: filterTime !== 'all' ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid #334155', 
+              color: filterTime !== 'all' ? '#60a5fa' : '#9ca3af', 
+              padding: '12px 16px', borderRadius: '8px', cursor: 'pointer', fontFamily: 'inherit', outline: 'none', height: '100%',
+              colorScheme: 'dark'
+            }}
+          />
+        </div>
+        <button 
+          onClick={() => setFilterTime('all')}
+          style={{ 
+            backgroundColor: filterTime === 'all' ? 'rgba(59, 130, 246, 0.2)' : '#1e293b', 
+            border: filterTime === 'all' ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid #334155', 
+            color: filterTime === 'all' ? '#60a5fa' : '#fff', 
+            padding: '0 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' 
+          }}
+        >
+          <Filter size={16} color={filterTime === 'all' ? '#60a5fa' : '#9ca3af'} /> 모든 이벤트
         </button>
       </div>
 

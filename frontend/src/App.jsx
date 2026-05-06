@@ -106,6 +106,7 @@ const App = () => {
             <div key={idx} className="history-item" onClick={() => {
               setMessages(item.messages);
               setExpandedResults({});
+              setCurrentSessionId(item.raw_session_id);
             }}>
               <div style={{flex: 1, overflow: 'hidden'}}>
                 <div className="item-title">{item.title}</div>
@@ -270,7 +271,7 @@ const App = () => {
             <div style={{maxWidth: '800px', margin: '0 auto', width: '100%', padding: '0 20px'}}>
               {messages.map((msg, i) => (
                 <div key={i}>
-                  <MessageItem msg={msg} expandedResults={expandedResults} setExpandedResults={setExpandedResults} index={i} />
+                  <MessageItem msg={msg} expandedResults={expandedResults} setExpandedResults={setExpandedResults} index={i} sessionId={currentSessionId} />
                   {msg.results?.map((res, j) => (
                     <div key={j} style={{marginBottom: '15px'}}>
                        <ResultCard res={res} resultKey={`${i}-${j}`} isExpanded={expandedResults[`${i}-${j}`]} setExpandedResults={setExpandedResults} />

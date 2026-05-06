@@ -67,7 +67,7 @@ class VectorDBService:
         self.index.add(embeddings)
         print(f"[Vector DB] 총 {len(self.scene_data)}개 장면 데이터로 인덱스 통합 구축 완료.")
 
-    def search(self, query: str, top_k: int = 3, start_time: str = None, end_time: str = None) -> List[Dict]:
+    def search(self, query: str, top_k: int = 3, start_time: str = None, end_time: str = None, threshold: float = 0.45) -> List[Dict]:
         if self.index is None or not self.scene_data:
             return []
 
@@ -119,8 +119,9 @@ class VectorDBService:
         for i, idx in enumerate(indices[0]):
             if idx < len(self.scene_data):
                 item = self.scene_data[idx]
-                if id(item) in filtered_ids:
-                    candidates.append((item, scores[0][i]))
+                score = scores[0][i]
+                if id(item) in filtered_ids and score >= threshold:
+                    candidates.append((item, score))
             
             if len(candidates) >= top_k:
                 break

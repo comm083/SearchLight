@@ -236,11 +236,23 @@ class FineTunedIntentClassifier:
     학습된 KoELECTRA 모델을 사용하여 의도를 분류합니다.
     ai.intent_classifier.classifier.IntentClassifier를 내부적으로 사용합니다.
     """
-    def __init__(self, model_path: str = "model/koelectra_finetuned"):
+    def __init__(self, model_path: str = None):
+        if model_path is None:
+            # 기본 경로는 프로젝트 최상단의 model/koelectra_finetuned
+            import os
+            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
+            model_path = os.path.join(base_dir, "model", "koelectra_finetuned")
+
         self.fallback_clf = RuleBasedIntentClassifier()
         self.ai_classifier = None
         
         try:
+            import sys
+            import os
+            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
+            if base_dir not in sys.path:
+                sys.path.insert(0, base_dir)
+                
             from ai.intent_classifier.classifier import IntentClassifier
             self.ai_classifier = IntentClassifier(model_path=model_path)
             print(f"[Service] KoELECTRA AI 분류기 엔진 로드 완료!")
