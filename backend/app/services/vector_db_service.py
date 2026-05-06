@@ -4,18 +4,14 @@ import faiss
 from typing import List, Dict
 from sentence_transformers import SentenceTransformer
 from supabase import create_client, Client
-from dotenv import load_dotenv
-
-load_dotenv()
-
-OLDEST_KEYWORDS = ["오래된", "옛날", "예전", "처음", "가장 오래", "오래전", "이전"]
-NEWEST_KEYWORDS = ["최근", "방금", "아까", "요즘", "새로운", "가장 최근", "최신"]
+from app.core.config import settings
+from app.core.constants import KEYWORDS
 
 
 class VectorDBService:
     def __init__(self):
-        url = os.getenv("SUPABASE_URL")
-        key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
+        url = settings.SUPABASE_URL
+        key = settings.SUPABASE_SERVICE_KEY or settings.SUPABASE_KEY
         self.supabase: Client = create_client(url, key)
 
         print("[Service] Supabase cctv_videos 기반 FAISS 검색 서비스 초기화 중...")
@@ -108,8 +104,8 @@ class VectorDBService:
         if not filtered_data:
             return []
 
-        is_oldest = any(kw in query for kw in OLDEST_KEYWORDS)
-        is_newest = any(kw in query for kw in NEWEST_KEYWORDS)
+        is_oldest = any(kw in query for kw in KEYWORDS["OLDEST"])
+        is_newest = any(kw in query for kw in KEYWORDS["NEWEST"])
         
         query_embedding = self.model.encode([query]).astype('float32')
         faiss.normalize_L2(query_embedding)

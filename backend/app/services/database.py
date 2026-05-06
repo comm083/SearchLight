@@ -5,10 +5,12 @@ from dotenv import load_dotenv
 # .env 파일에서 환경변수 로드
 load_dotenv()
 
+from app.core.config import settings
+
 class SupabaseService:
     def __init__(self):
-        url: str = os.getenv("SUPABASE_URL")
-        key: str = os.getenv("SUPABASE_KEY")
+        url = settings.SUPABASE_URL
+        key = settings.SUPABASE_KEY
         if not url or not key:
             print("[Warning] Supabase 설정이 없습니다. 로그 저장 기능이 비활성화됩니다.")
             self.supabase = None

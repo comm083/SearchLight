@@ -234,116 +234,59 @@ class RuleBasedIntentClassifier:
 class FineTunedIntentClassifier:
     """
     학습된 KoELECTRA 모델을 사용하여 의도를 분류합니다.
-    모델 로드 실패 시 RuleBasedIntentClassifier를 내부적으로 사용합니다.
+    ai.intent_classifier.classifier.IntentClassifier를 내부적으로 사용합니다.
     """
     def __init__(self, model_path: str = "model/koelectra_finetuned"):
-        self.model_path = model_path
-        self.labels = ["COUNTING", "SUMMARIZATION", "LOCALIZATION", "BEHAVIORAL", "CAUSAL"]
-        self.route_map = {
-            "COUNTING":      "sqlite_count",
-            "SUMMARIZATION": "vector_rag",
-            "LOCALIZATION":  "sqlite_latest",
-            "BEHAVIORAL":    "event_rag",
-            "CAUSAL":        "sqlite_and_rag",
-        }
         self.fallback_clf = RuleBasedIntentClassifier()
-        self.model = None
-        self.tokenizer = None
+        self.ai_classifier = None
         
-        # 모델 로드 시도
         try:
-            import torch
-            from transformers import AutoTokenizer, AutoModelForSequenceClassification
-
-            # 절대 경로 확인
-            abs_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../", model_path))
-            if not os.path.exists(abs_path):
-                print(f"[Warning] 모델 경로를 찾을 수 없습니다: {abs_path}")
-                return
-
-            # 체크포인트에 분류 헤드 가중치가 있는지 먼저 확인
-            import glob as _glob
-            ckpt_files = _glob.glob(os.path.join(abs_path, "*.safetensors")) + \
-                         _glob.glob(os.path.join(abs_path, "pytorch_model.bin"))
-            has_classifier_weights = False
-            if ckpt_files:
-                try:
-                    if ckpt_files[0].endswith(".safetensors"):
-                        from safetensors import safe_open
-                        with safe_open(ckpt_files[0], framework="pt") as f:
-                            has_classifier_weights = any("classifier" in k for k in f.keys())
-                    else:
-                        ckpt = torch.load(ckpt_files[0], map_location="cpu", weights_only=True)
-                        has_classifier_weights = any("classifier" in k for k in ckpt.keys())
-                except Exception:
-                    pass
-
-            if not has_classifier_weights:
-                print("[Warning] 체크포인트에 classifier 가중치 없음 — 규칙 기반 분류기로 대체합니다.")
-                return
-
-            self.tokenizer = AutoTokenizer.from_pretrained(abs_path)
-            self.model = AutoModelForSequenceClassification.from_pretrained(abs_path)
-            self.model.eval()
-            print(f"[Service] KoELECTRA 파인튜닝 모델 로드 완료! ({model_path})")
+            from ai.intent_classifier.classifier import IntentClassifier
+            self.ai_classifier = IntentClassifier(model_path=model_path)
+            print(f"[Service] KoELECTRA AI 분류기 엔진 로드 완료!")
         except Exception as e:
-            print(f"[Warning] KoELECTRA 모델 로드 실패 (규칙 기반으로 대체): {e}")
+            print(f"[Warning] AI 분류기 엔진 로드 실패 (규칙 기반 대체): {e}")
 
     def classify(self, query: str) -> IntentResult:
-        # 1. 일상 대화 키워드 강제 체크 (모델 오판 방지용 예외 필터)
-        # "넌", "너는", "어떻게 돼" 등 시스템 지칭 키워드가 있으면 모델 추론 전 CHITCHAT 우선 처리
+        # 1. 일상 대화 키워드 강제 체크
         rule_res = self.fallback_clf.classify(query)
         if rule_res.intent == "CHITCHAT" and rule_res.confidence >= 0.4:
             return rule_res
 
-        # 2. 모델이 로드되지 않았으면 규칙 기반으로 수행
-        if self.model is None or self.tokenizer is None:
+        # 2. AI 분류기가 로드되지 않았으면 규칙 기반 수행
+        if not self.ai_classifier or not self.ai_classifier.model:
             return rule_res
 
         try:
-            import torch
-            inputs = self.tokenizer(query, return_tensors="pt", truncation=True, max_length=128)
-            with torch.no_grad():
-                logits = self.model(**inputs).logits
-            
-            probs = torch.softmax(logits, dim=-1)[0]
-            pred_idx = torch.argmax(probs).item()
-            best_intent = self.labels[pred_idx]
-            confidence = probs[pred_idx].item()
-            if math.isnan(confidence): confidence = 0.0
-            
-            scores = {}
-            for i, l in enumerate(self.labels):
-                val = probs[i].item()
-                scores[l] = 0.0 if math.isnan(val) else val
+            res = self.ai_classifier.predict(query)
+            best_intent = res["intent_label"]
+            confidence = res["confidence"]
+            scores = res["probabilities"]
 
-            # [보정 로직 통합] 특정 날짜나 과거 시점이 언급된 경우 LOCALIZATION(실시간) 점수 감점
+            # [보정 로직] 과거 시점 언급 시 LOCALIZATION 점수 감점
             past_indicators = [r"\d+월", r"\d+일", "어제", "엊그제", "그저께", "지난", "이전", "전", "아까", "그때"]
             if any(re.search(p, query) for p in past_indicators):
                 if best_intent == "LOCALIZATION":
-                    # LOCALIZATION이 1위더라도 점수를 깎고 2위를 검토
                     scores["LOCALIZATION"] *= 0.1
                     best_intent = max(scores, key=scores.get)
                     confidence = scores[best_intent]
                 else:
-                    # 이미 다른 의도라면 점수만 보정
                     scores["LOCALIZATION"] *= 0.1
-                    scores["SUMMARIZATION"] += 0.2
 
-            # KoELECTRA 신뢰도가 낮으면 규칙 기반으로 대체
+            # AI 신뢰도가 낮으면 규칙 기반으로 대체
             if confidence < 0.65 and rule_res.confidence >= 0.50:
-                rule_res.method = f"rule_based:koelectra_low_conf({confidence:.2f})"
+                rule_res.method = f"rule_based:ai_low_conf({confidence:.2f})"
                 return rule_res
 
             return IntentResult(
                 intent=best_intent,
                 confidence=confidence,
                 scores=scores,
-                db_route=self.route_map.get(best_intent, "vector_rag"),
+                db_route=self.fallback_clf.ROUTE_MAP.get(best_intent, "vector_rag"),
                 method="koelectra_finetuned"
             )
         except Exception as e:
-            print(f"[Error] KoELECTRA 추론 오류: {e}")
+            print(f"[Error] AI 추론 중 오류 발생: {e}")
             return self.fallback_clf.classify(query)
 
 
@@ -449,100 +392,6 @@ def classify_with_koelectra(query: str) -> dict:
 '''
 
 
-# ─────────────────────────────────────────────────────────────────────
-# 통합 파이프라인 데모
-# ─────────────────────────────────────────────────────────────────────
-def run_full_pipeline_demo():
-    from korean_time_parser import KoreanTimeParser, TimeRange
-    from datetime import datetime
-
-    mock_now = datetime(2026, 4, 22, 15, 30, 0)
-    time_parser = KoreanTimeParser(now=mock_now)
-    intent_clf  = RuleBasedIntentClassifier()
-
-    print("\n" + "="*68)
-    print("  서치라이트 — NLP 파이프라인 통합 데모")
-    print(f"  기준 시각: {mock_now.strftime('%Y-%m-%d %H:%M')}")
-    print("="*68)
-
-    queries = [
-        "어제 오후 교대 시간에 A구역에 누가 있었어?",
-        "오늘 정문으로 총 몇 명 들어왔어?",
-        "지금 주차장에 차 있나?",
-        "어제 오후 두 시에 수상한 사람 없었어?",
-        "왜 30분 전에 경보가 울렸어?",
-        "오늘 오전 로비 상황 요약해줘",
-    ]
-
-    # 기대 DB 라우팅 (검증용)
-    expected = [
-        "vector_rag",      # 교대 시간 요약
-        "sqlite_count",    # 몇 명
-        "sqlite_latest",   # 지금 현재
-        "event_rag",       # 수상한 행동
-        "sqlite_and_rag",  # 왜 (인과)
-        "vector_rag",      # 요약
-    ]
-
-    passed = 0
-    for i, query in enumerate(queries):
-        time_result   = time_parser.parse(query)
-        intent_result = intent_clf.classify(query)
-        correct = intent_result.db_route == expected[i]
-        if correct: passed += 1
-        icon = "✅" if correct else "❌"
-
-        print(f"\n{icon} [{i+1}] 질의: \"{query}\"")
-        print(f"  ⏰ 시간 파서  : {time_result or '파싱 실패'}")
-        print(f"  🧠 의도 분류 : {intent_result}")
-        print(f"  🔀 DB 라우팅 : {intent_result.db_route}")
-
-    print(f"\n{'='*68}")
-    print(f"  의도 분류 정확도: {passed}/{len(queries)} ({passed/len(queries)*100:.0f}%)")
-    print("="*68 + "\n")
-
-
-# ─────────────────────────────────────────────────────────────────────
-# 단독 테스트
-# ─────────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    clf = RuleBasedIntentClassifier()
-
-    tests = [
-        ("오늘 몇 명 왔어?",                    "COUNTING"),
-        ("방문객 집계 해줘",                     "COUNTING"),
-        ("어제 오후에 무슨 일 있었어?",           "SUMMARIZATION"),
-        ("교대 시간대 정리해줘",                  "SUMMARIZATION"),
-        ("지금 정문에 사람 있어?",               "LOCALIZATION"),
-        ("현재 A구역 상황은?",                   "LOCALIZATION"),
-        ("수상한 사람 없었어?",                   "BEHAVIORAL"),
-        ("담 넘으려는 사람 감지됐어?",            "BEHAVIORAL"),
-        ("왜 알림이 울렸어?",                    "CAUSAL"),
-        ("그 사고 어떻게 생긴 거야?",             "CAUSAL"),
-        ("어제 오후 교대 시간에 A구역에 누가 있었어?", "SUMMARIZATION"),
-    ]
-
-    print("\n" + "="*68)
-    print("  규칙 기반 의도 분류기 — 단독 테스트")
-    print("="*68)
-
-    passed = 0
-    for query, expected in tests:
-        result = clf.classify(query)
-        ok = result.intent == expected
-        if ok: passed += 1
-        icon = "✅" if ok else f"❌(예상:{expected})"
-        print(f"\n{icon}")
-        print(f"  질의: \"{query}\"")
-        print(f"  {result}")
-
-    print(f"\n{'='*68}")
-    print(f"  통과: {passed}/{len(tests)} ({passed/len(tests)*100:.0f}%)")
-    print("="*68 + "\n")
-
-    # 파이프라인 통합 실행
-    print("\n── 통합 파이프라인 실행 ──")
-    run_full_pipeline_demo()
 
 # 서비스 인스턴스 생성 (백엔드 통합용)
 # 모델 폴더가 있으면 FineTunedIntentClassifier를 사용하고, 없으면 RuleBased를 사용합니다.

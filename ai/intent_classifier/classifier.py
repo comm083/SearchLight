@@ -1,57 +1,33 @@
+import os
 import torch
 import torch.nn.functional as F
 from transformers import ElectraTokenizer, ElectraForSequenceClassification
 from torch.utils.data import DataLoader, Dataset
+from ai.core.model_manager import model_manager
 
-# 의도 분류 카테고리
+# 의도 분류 카테고리 (백엔드와 통일)
 INTENT_CLASSES = {
-    0: "시간",      # 특정 시간/시간대 관련 질의
-    1: "사람 수",   # 인원/건수 집계 질의
-    2: "행동",      # 특정 행동/동작 관련 질의
-    3: "정보 요약", # 데이터 요약/리포트 요청
-    4: "오류 감지"  # 시스템/장비 이상 질의
+    0: "COUNTING",      # 인원/건수 집계 질의
+    1: "SUMMARIZATION", # 데이터 요약/리포트 요청
+    2: "LOCALIZATION",  # 특정 위치/현재 상태 질의
+    3: "BEHAVIORAL",    # 특정 행동/동작 관련 질의
+    4: "CAUSAL"         # 사건 원인/인과 관계 질의
 }
-
-class IntentDataset(Dataset):
-    """의도 분류 학습을 위한 PyTorch Dataset"""
-    def __init__(self, texts, labels, tokenizer, max_len=128):
-        self.texts = texts
-        self.labels = labels
-        self.tokenizer = tokenizer
-        self.max_len = max_len
-
-    def __len__(self):
-        return len(self.texts)
-
-    def __getitem__(self, item):
-        text = str(self.texts[item])
-        label = self.labels[item]
-
-        encoding = self.tokenizer(
-            text,
-            add_special_tokens=True,
-            max_length=self.max_len,
-            padding='max_length',
-            truncation=True,
-            return_attention_mask=True,
-            return_tensors='pt',
-        )
-
-        return {
-            'text': text,
-            'input_ids': encoding['input_ids'].flatten(),
-            'attention_mask': encoding['attention_mask'].flatten(),
-            'labels': torch.tensor(label, dtype=torch.long)
-        }
 
 class IntentClassifier:
     """KoELECTRA 기반 의도 분류기"""
-    def __init__(self, model_name="monologg/koelectra-small-v3-discriminator", num_labels=5):
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.tokenizer = ElectraTokenizer.from_pretrained(model_name)
-        self.model = ElectraForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
-        self.model.to(self.device)
+    def __init__(self, model_path="model/koelectra_finetuned", num_labels=5):
+        self.device = model_manager.get_device()
         self.num_labels = num_labels
+        self.model = None
+        self.tokenizer = None
+        
+        # 모델 경로가 존재하면 자동 로드
+        abs_path = model_manager.get_model_path(model_path)
+        if os.path.exists(abs_path):
+            self.load_model(abs_path)
+        else:
+            print(f"[IntentClassifier] 모델을 찾을 수 없어 기본 모드로 시작합니다: {abs_path}")
 
     def train(self, train_texts, train_labels, epochs=3, batch_size=16, lr=2e-5):
         """모델 학습 로직"""

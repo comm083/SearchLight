@@ -12,19 +12,21 @@ class AlertService:
         새로운 CCTV 이벤트(장면 묘사)가 들어왔을 때 위험 여부 및 범죄 유형을 판단합니다.
         """
         result = intent_service.classify(description)
+        # 긴급 키워드 포함 여부 우선 확인
+        has_critical_keyword = any(kw in description for kw in ["불", "연기", "라이터", "방화", "싸우", "폭행", "때리", "훔치", "절도"])
         
-        if result.intent == "BEHAVIORAL" and result.confidence > 0.5:
+        if (result.intent == "BEHAVIORAL" and result.confidence > 0.4) or has_critical_keyword:
             # 범죄 세부 유형 판별 (무인 편의점 특화)
             alert_type = "CRITICAL_ALERT"
             title = "[위험] 이상 행동 실시간 감지"
             
-            if any(kw in description for kw in ["불", "연기", "라이터", "방화"]):
+            if any(kw in description for kw in ["불", "연기", "라이터", "방화", "화재", "타는"]):
                 alert_type = "FIRE_ALERT"
                 title = "[긴급] 방화 및 화재 징후 감지"
-            elif any(kw in description for kw in ["싸움", "폭행", "때림", "밀침"]):
+            elif any(kw in description for kw in ["싸우", "폭행", "때리", "밀치", "멱살", "싸움", "때림"]):
                 alert_type = "VIOLENCE_ALERT"
                 title = "[긴급] 폭행 및 난동 상황 감지"
-            elif any(kw in description for kw in ["훔침", "절도", "몰래", "넣음", "가방"]):
+            elif any(kw in description for kw in ["훔치", "절도", "몰래", "가방", "넣음", "숨기", "가져가"]):
                 alert_type = "THEFT_ALERT"
                 title = "[경고] 절도 및 무단 반출 의심"
 
