@@ -11,6 +11,7 @@ import cv2
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import easyocr
+from ultralytics import YOLO, YOLOWorld
 
 load_dotenv()
 
@@ -182,20 +183,41 @@ def read_timestamp_from_frame(frame) -> str | None:
 # ─────────────────────────────────────────────
 MIN_FRAMES   = 5    # GPT에 전달할 최소 프레임 수
 MAX_FRAMES   = 20   # GPT에 전달할 최대 프레임 수 (페이로드 초과 방지)
-MOTION_AREA  = 800  # 모션 감지 최소 면적 (픽셀²)
+# YOLO 모델 전역 객체 저장용 딕셔너리
+_yolo_models = {}
+TARGET_CLASSES = ["person", "fire", "smoke", "open door"]
+
+def get_yolo_model(model_type="world"):
+    global _yolo_models
+    if model_type not in _yolo_models:
+        if model_type == "world":
+            print(f"  [YOLO] YOLO-World 모델(yolov8s-world.pt) 로드 중... 타겟: {TARGET_CLASSES}")
+            model = YOLOWorld("yolov8s-world.pt")
+            model.set_classes(TARGET_CLASSES)
+            _yolo_models["world"] = model
+        else:
+            # v8의 경우 기본적으로 yolov8n.pt 사용 (커스텀 학습 시 best.pt 등으로 변경 가능)
+            model_path = "yolov8n.pt" 
+            print(f"  [YOLO] YOLOv8 모델({model_path}) 로드 중...")
+            model = YOLO(model_path)
+            _yolo_models["v8"] = model
+            
+    return _yolo_models[model_type]
+
+def _detect_target_yolo(frame, model_type="world") -> list:
+    """지정된 YOLO 모델을 사용해 프레임 내 타겟 객체를 탐지합니다."""
+    model = get_yolo_model(model_type)
+    # 임계값 0.1 설정 (v8의 경우 기본 클래스만 탐지됨)
+    results = model(frame, conf=0.1, verbose=False)
+    detected_classes = set()
+    for r in results:
+        for c in r.boxes.cls:
+            class_name = model.names[int(c)]
+            detected_classes.add(class_name)
+    return list(detected_classes)
 
 
-def _detect_motion(prev_gray, curr_gray) -> bool:
-    """프레임 간 차분으로 움직임(사람 포함)을 감지합니다."""
-    diff = cv2.absdiff(prev_gray, curr_gray)
-    _, thresh = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    return any(cv2.contourArea(c) > MOTION_AREA for c in contours)
-
-
-def encode_video_and_extract_clips(video_path: str):
+def encode_video_and_extract_clips(video_path: str, model_type="world"):
     """
     Returns:
         base64frames (list[str])  : GPT 분석용 base64 프레임
@@ -218,9 +240,9 @@ def encode_video_and_extract_clips(video_path: str):
         start_timestamp = read_timestamp_from_frame(first_frame)
     video.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-    candidates = []            # (frame_idx, buffer, has_motion)
+    candidates = []            # (frame_idx, buffer, detected_objs)
     motion_frame_indices = []
-    prev_motion_gray = None   # 5초 간격 체크용 (직전 체크포인트 프레임)
+    all_detected_objects = set()
     cur = 0
 
     while video.isOpened():
@@ -229,25 +251,27 @@ def encode_video_and_extract_clips(video_path: str):
             break
 
         if cur % interval_motion == 0:
-            curr_gray = cv2.cvtColor(cv2.resize(frame, (320, 240)), cv2.COLOR_BGR2GRAY)
-            # prev_motion_gray: 5초 전 체크포인트 프레임과 비교 (직전 프레임과 비교 시 모션 미감지 버그 수정)
-            has_motion = _detect_motion(prev_motion_gray, curr_gray) if prev_motion_gray is not None else False
-            _, buffer = cv2.imencode(".jpg", frame)
-            candidates.append((cur, buffer, has_motion))
-            if has_motion:
+            # YOLO를 이용해 특정 객체 감지
+            detected_objs = _detect_target_yolo(frame, model_type=model_type)
+            has_target = len(detected_objs) > 0
+            
+            if has_target:
+                all_detected_objects.update(detected_objs)
                 motion_frame_indices.append(cur)
-            prev_motion_gray = curr_gray
+
+            _, buffer = cv2.imencode(".jpg", frame)
+            candidates.append((cur, buffer, detected_objs))
 
         cur += 1
 
     video.release()
     total_frames = cur or total_frames
 
-    # 분석용 base64 프레임 (모션 구간은 5초, 그 외 10초)
+    # 분석용 base64 프레임 (객체 감지 구간은 5초, 그 외 10초)
     base64frames = [
         base64.b64encode(buf).decode("utf-8")
-        for idx, buf, has_motion in candidates
-        if has_motion or idx % interval_normal == 0
+        for idx, buf, detected_objs in candidates
+        if (len(detected_objs) > 0) or idx % interval_normal == 0
     ]
 
     # 프레임이 MIN_FRAMES보다 적으면 후보 전체에서 균등하게 보충
@@ -315,7 +339,7 @@ def encode_video_and_extract_clips(video_path: str):
 
         video2.release()
 
-    return base64frames, person_clips, start_timestamp
+    return base64frames, person_clips, start_timestamp, list(all_detected_objects)
 
 
 # ─────────────────────────────────────────────
@@ -366,7 +390,7 @@ JSON으로만 출력하세요 (설명 없이):
         }
 
 
-def analyze_frames(image_list: list) -> dict:
+def analyze_frames(image_list: list, detected_objects: list) -> dict:
     if not api_key:
         raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
     client = OpenAI(api_key=api_key)
@@ -374,7 +398,14 @@ def analyze_frames(image_list: list) -> dict:
         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}}
         for img in image_list
     ]
-    contents.append({"type": "text", "text": ANALYSIS_PROMPT})
+    
+    # YOLO 탐지 결과가 있으면 GPT에게 컨텍스트로 제공
+    prompt_text = ANALYSIS_PROMPT
+    if detected_objects:
+        obj_str = ", ".join(detected_objects)
+        prompt_text += f"\n\n[추가 참고 정보]: 비전 AI 모델이 이 영상에서 다음 객체들을 감지했습니다: {obj_str}. 이 정보를 바탕으로 상황을 더욱 정확히 분석하세요."
+        
+    contents.append({"type": "text", "text": prompt_text})
     response = client.chat.completions.create(
         model='gpt-4o',
         messages=[{"role": "user", "content": contents}],
@@ -475,19 +506,19 @@ ON CONFLICT (id) DO NOTHING;
 # ─────────────────────────────────────────────
 # 단일 영상 처리
 # ─────────────────────────────────────────────
-def process_video(video_path: str):
+def process_video(video_path: str, model_type="world"):
     supabase = get_supabase_client()
     video_file = os.path.basename(video_path)
-    print(f"\n[처리] {video_file}")
+    print(f"\n[처리] {video_file} (모델: {model_type})")
 
-    # 중복 처리 방지
-    existing = supabase.table('cctv_videos').select('id').eq('video_filename', video_file).execute()
-    if existing.data:
-        print("  -> 이미 처리된 영상입니다. 건너뜁니다.")
-        return
+    # 중복 처리 방지 (로컬 파일 저장 시에는 건너뛰지 않도록 주석 처리하거나 로직 변경 가능)
+    # existing = supabase.table('cctv_videos').select('id').eq('video_filename', video_file).execute()
+    # if existing.data:
+    #     print("  -> 이미 처리된 영상입니다. 건너뜁니다.")
+    #     return
 
-    # 프레임 추출 + 클립 추출 + 타임스탬프 OCR
-    frames, person_clips, start_timestamp = encode_video_and_extract_clips(video_path)
+    # 프레임 추출 + 클립 추출 + 타임스탬프 OCR (YOLO로 타겟 객체도 반환)
+    frames, person_clips, start_timestamp, detected_objects = encode_video_and_extract_clips(video_path, model_type=model_type)
     if not frames:
         print("  -> 프레임을 추출할 수 없습니다.")
         return
@@ -501,11 +532,18 @@ def process_video(video_path: str):
     # GPT 분석
     print(f"  GPT 분석 중... ({len(frames)}프레임 전송)")
     try:
-        video_info = analyze_frames(frames)
+        video_info = analyze_frames(frames, detected_objects)
     except Exception as e:
         print(f"  -> [GPT 실패] {type(e).__name__}: {e}")
         video_info = {"summary": f"GPT 분석 실패: {e}", "frames": []}
 
+    # 의도별 문장 생성 (GPT)
+    print("  의도별 문장 생성 중 (GPT)...")
+    client_obj = OpenAI(api_key=api_key)
+    intent_sentences = generate_intent_sentences(client_obj, video_info.get("summary", ""))
+
+    # --- 기존 Supabase 업로드 로직 (임시 주석 처리) ---
+    """
     # cctv_videos 저장 (frames 컬럼 제거)
     result = supabase.table('cctv_videos').insert({
         "video_filename": video_file,
@@ -515,10 +553,6 @@ def process_video(video_path: str):
     video_id = result.data[0]['id']
     print(f"  -> cctv_videos 저장 완료 (id: {video_id})")
 
-    # 의도별 문장 생성 및 cctv_intents 저장
-    print("  의도별 문장 생성 중 (GPT)...")
-    client_obj = OpenAI(api_key=api_key)
-    intent_sentences = generate_intent_sentences(client_obj, video_info.get("summary", ""))
     try:
         supabase.table('cctv_intents').insert({
             "video_id":    video_id,
@@ -549,6 +583,36 @@ def process_video(video_path: str):
         finally:
             if os.path.exists(clip_path):
                 os.remove(clip_path)
+    """
+    # --------------------------------------------------
+
+    # 모델 성능 비교를 위해 Supabase 대신 로컬 JSON 파일에 결과 저장
+    output_filename = f"model_{model_type}_data.json"
+    
+    output_data = {
+        "video_filename": video_file,
+        "event_date": start_timestamp,
+        "summary": video_info.get("summary", ""),
+        "intents": intent_sentences,
+        "clips": [{"start_sec": s, "end_sec": e, "local_path": p} for s, e, p in person_clips]
+    }
+    
+    # 기존 파일이 있으면 읽어서 배열에 추가
+    if os.path.exists(output_filename):
+        try:
+            with open(output_filename, 'r', encoding='utf-8') as f:
+                existing_data = json.load(f)
+        except json.JSONDecodeError:
+            existing_data = []
+    else:
+        existing_data = []
+        
+    existing_data.append(output_data)
+    
+    with open(output_filename, 'w', encoding='utf-8') as f:
+        json.dump(existing_data, f, ensure_ascii=False, indent=2)
+        
+    print(f"  -> Supabase 업로드를 생략하고 '{output_filename}'에 분석 결과를 임시 저장했습니다.")
 
 
 # ─────────────────────────────────────────────
@@ -560,6 +624,7 @@ def main():
     parser.add_argument('--schema', action='store_true', help='테이블 생성 SQL 출력 후 종료')
     parser.add_argument('--video',  type=str, help='처리할 단일 영상 파일 경로')
     parser.add_argument('--dir',    type=str, help='처리할 영상 디렉토리 경로')
+    parser.add_argument('--model',  type=str, choices=['v8', 'world'], default='world', help='사용할 YOLO 모델 종류 (v8 또는 world)')
     args = parser.parse_args()
 
     if args.schema:
@@ -570,7 +635,7 @@ def main():
         if not os.path.exists(args.video):
             print(f"오류: 파일을 찾을 수 없습니다: {args.video}")
             return
-        process_video(args.video)
+        process_video(args.video, model_type=args.model)
         return
 
     # 기본 경로: backend/static/mp4Data
@@ -580,10 +645,10 @@ def main():
         return
 
     video_files = [f for f in os.listdir(video_dir) if f.lower().endswith('.mp4')]
-    print(f"총 {len(video_files)}개 영상 처리 시작...")
+    print(f"총 {len(video_files)}개 영상 처리 시작... (모델: {args.model})")
     for vf in video_files:
         try:
-            process_video(os.path.join(video_dir, vf))
+            process_video(os.path.join(video_dir, vf), model_type=args.model)
         except Exception as e:
             print(f"  -> 실패: {vf} ({e})")
     print("\n모든 작업 완료!")
