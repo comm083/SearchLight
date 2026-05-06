@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Plus, Search, Shield, Clock, Settings, User, MoreVertical, LogIn, LogOut, Mic, Square, X
+  Plus, Search, Shield, Clock, Settings, User, MoreVertical, LogIn, LogOut, Mic, Square, X, Archive
 } from 'lucide-react';
 
 // Hooks
@@ -11,6 +11,7 @@ import { useVoice } from './hooks/useVoice';
 // Components
 import MessageItem from './components/chat/MessageItem';
 import ResultCard from './components/chat/ResultCard';
+import EventHistory from './components/EventHistory';
 
 const App = () => {
   const { isLoggedIn, user, login, logout } = useAuth();
@@ -23,6 +24,7 @@ const App = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedResults, setExpandedResults] = useState({});
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [currentView, setCurrentView] = useState('chat');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const chatEndRef = useRef(null);
@@ -92,7 +94,8 @@ const App = () => {
     <div className="app-container">
       {/* Sidebar - Simplified for refactoring */}
       <aside className="sidebar" style={{ width: `${sidebarWidth}px`, flexShrink: 0 }}>
-        <button className="new-chat-btn" onClick={startNewChat}><Plus size={18} /><span>새 채팅</span></button>
+        <button className={`new-chat-btn ${currentView === 'archive' ? 'active' : ''}`} style={{ marginBottom: '10px', backgroundColor: currentView === 'archive' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }} onClick={() => setCurrentView('archive')}><Archive size={18} /><span>영상 보관함</span></button>
+        <button className="new-chat-btn" onClick={() => { startNewChat(); setCurrentView('chat'); }}><Plus size={18} /><span>새 채팅</span></button>
         <div className="search-box">
           <Search className="search-icon" size={14} />
           <input type="text" placeholder="최근 기록 검색..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -208,16 +211,20 @@ const App = () => {
       )}
 
       {/* Main Content */}
-      <main className="main-content">
+      <main className="main-content" style={{ overflowY: 'auto' }}>
         <header className="header">
-          <div className="header-logo"><Shield size={18} color="#3b82f6" /> SearchLight <MoreVertical size={14} /></div>
+          <div className="header-logo" onClick={() => setCurrentView('chat')} style={{cursor: 'pointer'}}><Shield size={18} color="#3b82f6" /> SearchLight <MoreVertical size={14} /></div>
           <div style={{display: 'flex', gap: '20px'}}>
              <Settings size={18} cursor="pointer" className="icon-btn" />
              <User size={18} cursor="pointer" className="icon-btn" />
           </div>
         </header>
 
-        <div className="chat-container">
+        {currentView === 'archive' ? (
+          <EventHistory />
+        ) : (
+          <>
+            <div className="chat-container">
           {messages.length === 0 ? (
             <div className="welcome-screen">
               <div style={{width: '60px', height: '60px', backgroundColor: 'rgba(59,130,246,0.1)', borderRadius: '15px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '25px', border: '1px solid rgba(59,130,246,0.2)'}}>
@@ -315,6 +322,8 @@ const App = () => {
               </div>
             </div>
           </div>
+        )}
+        </>
         )}
       </main>
       
