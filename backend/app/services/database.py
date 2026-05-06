@@ -41,13 +41,20 @@ class SupabaseService:
         특정 세션의 과거 검색 기록을 가져옵니다.
         """
         try:
+            # session_id가 포함된 것 가져오기 (기존 하위 호환 및 새로운 _timestamp 포맷 지원)
             response = self.supabase.table('search_logs') \
                 .select("*") \
-                .eq("session_id", session_id) \
+                .like("session_id", f"{session_id}%") \
                 .order("created_at", desc=True) \
                 .limit(limit) \
                 .execute()
-            return response.data
+            
+            # 다른 사용자(예: admin vs admin2)가 섞이지 않도록 엄격히 필터링
+            filtered_data = [
+                row for row in response.data 
+                if row['session_id'] == session_id or row['session_id'].startswith(f"{session_id}_")
+            ]
+            return filtered_data
         except Exception as e:
             print(f"[Supabase Error] 히스토리 조회 실패: {e}")
             return []
@@ -140,6 +147,29 @@ class SupabaseService:
         except Exception as e:
             print(f"[Supabase Error] 이벤트 목록 조회 실패: {e}")
             return []
+
+    def log_feedback(self, history_id: int, feedback_type: str, comment: str = None):
+        """
+        검색 결과에 대한 사용자 피드백(예: wrong_result)을 기록합니다.
+        """
+        if not self.supabase:
+            print(f"[Mock DB] 피드백 기록: ID={history_id}, 타입={feedback_type}")
+            return False
+            
+        try:
+            data = {"feedback": feedback_type}
+            if comment:
+                data["feedback_comment"] = comment
+                
+            response = self.supabase.table('search_logs') \
+                .update(data) \
+                .eq("id", history_id) \
+                .execute()
+            print(f"[Supabase] 피드백 기록 완료: {history_id}")
+            return True
+        except Exception as e:
+            print(f"[Supabase Error] 피드백 저장 실패 (스키마 불일치일 수 있음): {e}")
+            return False
 
 # 싱글톤 패턴 (서버 내에서 한 번만 생성되도록)
 db_service = SupabaseService()

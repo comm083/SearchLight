@@ -115,8 +115,8 @@ class NLPService:
 
     def _get_system_prompt(self, mode: str) -> str:
         if mode == "flash":
-            return "당신은 보안 분석관입니다. 특정 시점의 핵심 상황을 1~2문장으로 즉답하세요. 타임스탬프를 문장 끝에 포함하세요. (예: '...포착되었습니다. [13:05]')"
-        return "당신은 지능형 CCTV 보안 분석 AI '서치라이트'의 전문 분석관입니다. 핵심 정보만 1~2문장 내외로 간결하게 보고합니다."
+            return "당신은 보안 분석관입니다. 특정 시점의 핵심 상황을 1~2문장으로 즉답하세요. 타임스탬프를 문장 끝에 포함하세요. (예: '...포착되었습니다. [13:05]') 제공된 데이터에 관련 정보가 없으면 '관련 기록이 없습니다.'라고만 답하세요."
+        return "당신은 지능형 CCTV 보안 분석 AI '서치라이트'의 전문 분석관입니다. 제공된 실제 데이터를 기반으로 1~2문장 내외로 간결하게 보고하며, 관련 데이터가 없을 시 절대 상상해서 지어내지 않습니다."
 
     def _get_intent_instruction(self, intent: str) -> str:
         instructions = {
@@ -129,11 +129,12 @@ class NLPService:
         return instructions.get(intent, instructions["SUMMARIZATION"])
 
     def _get_writing_guidelines(self, mode: str) -> str:
-        if mode == "flash": return "1. 핵심 상황 즉답. 2. 타임스탬프 포함. 3. 맺음말 생략."
+        if mode == "flash": return "1. 핵심 상황 즉답. 2. 타임스탬프 포함. 3. 데이터가 없으면 '관련 정보가 없습니다.' 응답. 4. 상상/추측 금지. 5. 맺음말 생략."
         return """1. 📌 상황 요약, 🔍 핵심 분석, 🚨 위험 및 조치 섹션만 사용.
 2. 각 섹션 최대 2문장.
 3. 사실에 근거한 타임스탬프 표기 [HH:MM].
-4. 맺음말 절대 금지."""
+4. [핵심] 제공된 [실제 데이터]에 질문에 대한 답변 정보가 전혀 없다면 절대 상상해서 지어내지 말고, '요청하신 정보와 관련된 기록이 없습니다'라고 명확히 답변할 것.
+5. 맺음말 절대 금지."""
 
     def _call_llm(self, system_prompt: str, user_content: str) -> str:
         """LLM 호출 공통 로직"""

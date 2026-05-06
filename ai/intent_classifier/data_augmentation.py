@@ -72,9 +72,9 @@ def build_dataset():
 
     augmented_data = []
     for i in range(5):
-        print(f"Generating 260 new samples for: {INTENT_CATEGORIES[i]}...")
-        # 클래스별로 260개씩 추가 생성
-        new_data = generate_augmented_data(intent_id=i, num_samples=260)
+        print(f"Generating 200 new samples for: {INTENT_CATEGORIES[i]}...")
+        # 클래스별로 200개씩 추가 생성
+        new_data = generate_augmented_data(intent_id=i, num_samples=200)
         augmented_data.extend(new_data)
 
     # 데이터 결합

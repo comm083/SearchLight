@@ -142,13 +142,16 @@ class SearchManager:
     def _handle_localization(self, query: str, response: Dict) -> Dict:
         locations = ["정문", "로비", "주차장", "식당", "창고", "사무실", "하역장", "엘리베이터", "옥상"]
         target_loc = next((loc for loc in locations if loc in query), None)
-        latest_status = db_service.get_latest_status(location=target_loc)
         
-        if latest_status:
+        # 임계값 필터링이 적용된 벡터 검색을 통해 대상이 실제로 존재하는지 확인
+        search_results = vector_db_service.search(query=query, top_k=1)
+        
+        if search_results:
+            latest_status = search_results[0]
             response["results"] = [latest_status]
-            loc_str = latest_status['location']
-            time_str = latest_status['timestamp']
-            desc_str = latest_status['description']
+            loc_str = latest_status.get('location', target_loc or '확인된 구역')
+            time_str = latest_status.get('timestamp') or latest_status.get('event_date')
+            desc_str = latest_status.get('description', '')
             
             response["ai_report"] = (
                 f"📌 **실시간 위치 확인 보고**\n\n"
@@ -162,7 +165,7 @@ class SearchManager:
             response["ai_report"] = (
                 f"⚠️ **위치 확인 불가**: " + 
                 (f"'{target_loc}' 구역에서 " if target_loc else "전체 구역에서 ") +
-                "최근 1시간 내에 포착된 유의미한 보안 이벤트가 없습니다. 실시간 스트리밍 확인을 권장합니다."
+                "요청하신 대상과 일치하는 유의미한 보안 이벤트(CCTV 기록)를 찾을 수 없습니다."
             )
         return response
 

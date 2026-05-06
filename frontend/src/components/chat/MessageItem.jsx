@@ -1,9 +1,32 @@
-import React from 'react';
-import { Shield, AlertCircle, Clock } from 'lucide-react';
+import React, { useState } from 'react';
+import { Shield, AlertCircle, Clock, ThumbsDown } from 'lucide-react';
 
-const MessageItem = ({ msg, expandedResults, setExpandedResults, index }) => {
+const MessageItem = ({ msg, expandedResults, setExpandedResults, index, sessionId }) => {
   const isUser = msg.type === 'user';
+  const [feedbackSent, setFeedbackSent] = useState(false);
   
+  const handleFeedback = async () => {
+    if (feedbackSent) return;
+    try {
+      const response = await fetch('http://localhost:8000/api/v1/history/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          feedback_type: 'wrong_result',
+          comment: 'User marked this AI report/result as incorrect.'
+        })
+      });
+      if (response.ok) {
+        setFeedbackSent(true);
+      }
+    } catch (error) {
+      console.error("Feedback error:", error);
+    }
+  };
+
   if (isUser) {
     return (
       <div style={{marginBottom: '30px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end'}}>
@@ -45,12 +68,31 @@ const MessageItem = ({ msg, expandedResults, setExpandedResults, index }) => {
           )}
         </div>
 
-        {/* Results Rendering Logic (Simplified for this snippet) */}
+        {/* Feedback Section */}
+        {msg.intent !== 'CHITCHAT' && msg.intent !== 'ERROR' && (
+          <div style={{marginTop: '10px', display: 'flex', justifyContent: 'flex-end'}}>
+            <button 
+              onClick={handleFeedback}
+              disabled={feedbackSent}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px', 
+                background: feedbackSent ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
+                color: feedbackSent ? '#10b981' : '#ef4444',
+                border: feedbackSent ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
+                padding: '6px 12px', borderRadius: '6px', fontSize: '11px', cursor: feedbackSent ? 'default' : 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              <ThumbsDown size={12} />
+              {feedbackSent ? "오답 신고가 접수되었습니다. (학습에 반영)" : "잘못된 결과 (피드백)"}
+            </button>
+          </div>
+        )}
+
+        {/* Results Rendering Logic */}
         {msg.results?.length > 0 && (
           <div style={{marginTop: '20px'}}>
-             {/* Result Cards would go here... */}
-             {/* To keep it simple for refactoring, I'll pass result rendering as a sub-component or keep it here */}
-             <div style={{color: '#9ca3af', fontSize: '12px'}}>검색 결과 {msg.results.length}건</div>
+             <div style={{color: '#9ca3af', fontSize: '12px', marginBottom: '10px'}}>검색 결과 {msg.results.length}건</div>
           </div>
         )}
       </div>

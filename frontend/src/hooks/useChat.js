@@ -34,17 +34,41 @@ export const useChat = (isLoggedIn, userName) => {
         index === self.findIndex((t) => t.id === item.id)
       );
 
-      const formattedHistory = uniqueHistory.map(item => ({
-        id: item.id,
-        title: item.query || "(제목 없음)",
-        location: item.intent,
-        date: new Date(item.created_at).toLocaleDateString(),
-        ai_report: item.ai_report,
-        messages: [
+      const grouped = {};
+      uniqueHistory.forEach(item => {
+        let sid = item.session_id;
+        // 기존 레거시 데이터 처리를 위해 session_id에 '_'가 없으면 각각의 ID를 session_id로 간주
+        if (!sid || !sid.includes('_')) {
+          sid = `legacy_${item.id}`;
+        }
+        
+        if (!grouped[sid]) {
+          grouped[sid] = {
+            id: item.id, // 그룹 대표 id
+            session_id: sid, // 세션 ID 보존
+            raw_session_id: sid.includes('_') ? sid.split('_')[1] : sid,
+            title: item.query || "(제목 없음)",
+            location: item.intent,
+            date: new Date(item.created_at).toLocaleDateString(),
+            created_at: item.created_at,
+            messages: []
+          };
+        }
+        
+        // 시간순(오래된 순 -> 최신순)으로 정렬되도록 배열 앞에 삽입 (uniqueHistory가 최신순 정렬이므로)
+        grouped[sid].messages.unshift(
           { type: 'user', text: item.query },
           { type: 'ai', report: item.ai_report, intent: item.intent }
-        ]
-      }));
+        );
+        
+        // 마지막으로 순회한 아이템(가장 오래된 아이템)의 쿼리를 방제로 사용
+        grouped[sid].title = item.query || "(제목 없음)";
+        grouped[sid].location = item.intent;
+      });
+
+      // 객체를 배열로 변환하고 가장 최근 세션이 위로 오도록 정렬
+      const formattedHistory = Object.values(grouped).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      
       setRecentSearches(formattedHistory);
     } catch (error) {
       console.error("전체 히스토리 로딩 실패:", error);
@@ -73,7 +97,7 @@ export const useChat = (isLoggedIn, userName) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           query: text, 
-          session_id: isLoggedIn ? userName : 'guest' 
+          session_id: `${isLoggedIn ? userName : 'guest'}_${sessionId}` 
         }),
       });
       const data = await res.json();

@@ -41,7 +41,7 @@
   "summary_type": "first",
   "summary_use_proj": true,
   "tie_word_embeddings": true,
-  "transformers_version": "5.6.0",
+  "transformers_version": "5.0.0",
   "type_vocab_size": 2,
   "use_cache": true,
   "vocab_size": 35000
