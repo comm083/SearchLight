@@ -114,5 +114,32 @@ class SupabaseService:
             print(f"[Supabase Error] 최신 상태 조회 실패: {e}")
             return None
 
+    def get_all_events(self, limit: int = 50):
+        """
+        영상 보관함(Event History)에 표시할 이벤트 데이터를 모두 가져옵니다.
+        """
+        try:
+            query = self.supabase.table('cctv_vectors').select('id, content, metadata').order('metadata->timestamp', desc=True).limit(limit)
+            response = query.execute()
+            
+            events = []
+            if response.data:
+                for item in response.data:
+                    metadata = item.get('metadata', {})
+                    # confidence 값 등 UI에 필요한 항목들 추출 (없을 경우 기본값)
+                    events.append({
+                        "id": item.get('id', str(len(events))),
+                        "title": item.get('content', '보안 이벤트 기록'),
+                        "location": metadata.get('location', '미상'),
+                        "timestamp": metadata.get('timestamp', ''),
+                        "image_path": metadata.get('image_path', ''),
+                        "tag": metadata.get('person', '') if metadata.get('person') else 'Event',
+                        "confidence": metadata.get('confidence', 90)
+                    })
+            return events
+        except Exception as e:
+            print(f"[Supabase Error] 이벤트 목록 조회 실패: {e}")
+            return []
+
 # 싱글톤 패턴 (서버 내에서 한 번만 생성되도록)
 db_service = SupabaseService()

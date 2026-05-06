@@ -16,3 +16,9 @@ async def simulate_realtime_event(request: AlertSimulationRequest):
 async def get_latest_alerts():
     """최신 알림 목록 조회"""
     return alert_service.get_latest_alerts()
+
+@router.get("/events")
+async def get_all_events(limit: int = 50):
+    """모든 비디오 이벤트 조회 (Event History 용)"""
+    from app.services.database import db_service
+    return db_service.get_all_events(limit)
