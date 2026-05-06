@@ -1,12 +1,22 @@
-import React from 'react';
-import { Clock } from 'lucide-react';
+import React, { useState } from 'react';
+import { Clock, Maximize2 } from 'lucide-react';
 
 const ResultCard = ({ res, resultKey, isExpanded, setExpandedResults }) => {
+  const [showImageModal, setShowImageModal] = useState(false);
+
   return (
+    <>
     <div className="result-card" style={{backgroundColor: '#0b0f19', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.05)', transition: 'all 0.3s ease'}}>
       <div style={{display: 'flex', gap: '15px', padding: '12px'}}>
-        <div style={{width: '140px', height: '100px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, position: 'relative'}}>
-          <img src={`http://localhost:8000${res.image_path}`} style={{width: '100%', height: '100%', objectFit: 'cover'}} alt="cctv thumb" />
+        <div 
+          style={{width: '140px', height: '100px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, position: 'relative', cursor: 'pointer'}}
+          onClick={() => setShowImageModal(true)}
+        >
+          <img src={`http://localhost:8000${res.image_path}`} style={{width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.2s'}} onMouseOver={e => e.currentTarget.style.transform='scale(1.05)'} onMouseOut={e => e.currentTarget.style.transform='scale(1)'} alt="cctv thumb" />
+          <div style={{position: 'absolute', top: '5px', left: '5px', backgroundColor: 'rgba(0,0,0,0.7)', padding: '4px 8px', borderRadius: '12px', color: '#e5e7eb', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: '500', zIndex: 10, backdropFilter: 'blur(4px)'}}>
+            <div style={{width: '6px', height: '6px', backgroundColor: '#ef4444', borderRadius: '50%', boxShadow: '0 0 4px #ef4444'}}></div>
+            영상 녹화본
+          </div>
           <div style={{position: 'absolute', bottom: '5px', right: '5px', backgroundColor: 'rgba(0,0,0,0.6)', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', color: '#3b82f6'}}>{res.score ? (res.score * 100).toFixed(0) : '100'}%</div>
         </div>
         <div style={{flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between'}}>
@@ -43,6 +53,23 @@ const ResultCard = ({ res, resultKey, isExpanded, setExpandedResults }) => {
         </div>
       )}
     </div>
+
+    {showImageModal && (
+      <div 
+        style={{position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out'}}
+        onClick={() => setShowImageModal(false)}
+      >
+        <img 
+          src={`http://localhost:8000${res.image_path}`} 
+          style={{maxWidth: '90%', maxHeight: '90%', objectFit: 'contain', borderRadius: '8px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'}} 
+          alt="Enlarged cctv frame" 
+        />
+        <div style={{position: 'absolute', bottom: '40px', color: '#9ca3af', fontSize: '14px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '8px 16px', borderRadius: '20px'}}>
+          아무 곳이나 클릭하여 닫기
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 
