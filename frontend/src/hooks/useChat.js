@@ -58,7 +58,7 @@ export const useChat = (isLoggedIn, userName) => {
         // 시간순(오래된 순 -> 최신순)으로 정렬되도록 배열 앞에 삽입 (uniqueHistory가 최신순 정렬이므로)
         grouped[sid].messages.unshift(
           { type: 'user', text: item.query },
-          { type: 'ai', report: item.ai_report, intent: item.intent }
+          { type: 'ai', report: item.ai_report, intent: item.intent, results: item.results || [] }
         );
         
         // 마지막으로 순회한 아이템(가장 오래된 아이템)의 쿼리를 방제로 사용

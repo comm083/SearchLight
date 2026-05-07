@@ -18,10 +18,11 @@ class SupabaseService:
         self.supabase: Client = create_client(url, key)
         print("[Service] Supabase 클라우드 DB 연동 완료!")
 
-    def log_search(self, query: str, intent: str, session_id: str = "default", ai_report: str = None):
+    def log_search(self, query: str, intent: str, session_id: str = "default", ai_report: str = None, results: list = None):
         if not self.supabase:
             print(f"[Mock DB] 로그 기록 (DB 연결 없음): {query} / {intent}")
             return
+        import json
         try:
             # Supabase 'search_logs' 테이블에 데이터 전송
             data = {
@@ -31,10 +32,21 @@ class SupabaseService:
             }
             if ai_report:
                 data["ai_report"] = ai_report
+            if results:
+                data["results"] = json.dumps(results, ensure_ascii=False)
                 
             response = self.supabase.table('search_logs').insert(data).execute()
         except Exception as e:
-            print(f"[Supabase Error] 로그 저장 실패: {e}")
+            # results 컬럼이 없는 경우 results 제외하고 재시도
+            if results and 'results' in str(e):
+                try:
+                    data.pop("results", None)
+                    self.supabase.table('search_logs').insert(data).execute()
+                    print(f"[Supabase] results 컬럼 없음 - results 제외하고 저장 완료")
+                except Exception as e2:
+                    print(f"[Supabase Error] 로그 저장 실패: {e2}")
+            else:
+                print(f"[Supabase Error] 로그 저장 실패: {e}")
 
     def get_search_history(self, session_id: str = "default", limit: int = 20):
         """
@@ -50,10 +62,19 @@ class SupabaseService:
                 .execute()
             
             # 다른 사용자(예: admin vs admin2)가 섞이지 않도록 엄격히 필터링
-            filtered_data = [
-                row for row in response.data 
-                if row['session_id'] == session_id or row['session_id'].startswith(f"{session_id}_")
-            ]
+            import json
+            filtered_data = []
+            for row in response.data:
+                if row['session_id'] == session_id or row['session_id'].startswith(f"{session_id}_"):
+                    # results 컬럼이 JSON 문자열이면 파싱
+                    if row.get('results') and isinstance(row['results'], str):
+                        try:
+                            row['results'] = json.loads(row['results'])
+                        except Exception:
+                            row['results'] = []
+                    elif not row.get('results'):
+                        row['results'] = []
+                    filtered_data.append(row)
             return filtered_data
         except Exception as e:
             print(f"[Supabase Error] 히스토리 조회 실패: {e}")

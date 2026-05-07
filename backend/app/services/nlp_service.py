@@ -101,12 +101,39 @@ class NLPService:
             return "보안 보고서를 생성하는 동안 기술적인 문제가 발생했습니다. 잠시 후 다시 시도해 주세요."
 
     def _build_context_text(self, contexts: list) -> str:
+        import re
         items = []
         for c in contexts:
             desc = c.get('description', '설명 없음')
+            ts_raw = c.get('timestamp') or c.get('event_date') or ''
+            
+            # 날짜와 시간 레이블 구성
+            date_label = ''
+            time_label = ''
+            
+            if ts_raw:
+                ts_str = str(ts_raw)
+                # 날짜 추출 (YYYY-MM-DD)
+                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', ts_str)
+                if date_match:
+                    date_label = f"[{date_match.group(1)}]"
+                
+                # 시간 추출 및 오전/오후 변환
+                time_match = re.search(r'(\d{1,2}):(\d{2}):(\d{2})', ts_str)
+                if time_match:
+                    h, mi, s = int(time_match.group(1)), time_match.group(2), time_match.group(3)
+                    ampm = '오전' if h < 12 else '오후'
+                    h12 = h if h <= 12 else h - 12
+                    time_label = f"[{ampm} {h12}:{mi}:{s}]"
+            
+            ts_display = f"{date_label} {time_label}".strip()
             dets = c.get('detections', [])
             det_text = ", ".join([f"[{d['time']}] {d['description']}" for d in dets]) if dets else "상세 정보 없음"
-            items.append(f"장면: {desc} | 상세: {det_text}")
+            
+            if ts_display:
+                items.append(f"시점: {ts_display} | 장면: {desc} | 상세: {det_text}")
+            else:
+                items.append(f"장면: {desc} | 상세: {det_text}")
         return "\n".join([f"- {item}" for item in items])
 
     def _get_fallback_notice(self, is_fallback: bool, requested_time: str) -> str:
@@ -131,10 +158,11 @@ class NLPService:
     def _get_writing_guidelines(self, mode: str) -> str:
         if mode == "flash": return "1. 핵심 상황 즉답. 2. 타임스탬프 포함. 3. 데이터가 없으면 '관련 정보가 없습니다.' 응답. 4. 상상/추측 금지. 5. 맺음말 생략."
         return """1. 📌 상황 요약, 🔍 핵심 분석, 🚨 위험 및 조치 섹션만 사용.
-2. 각 섹션 최대 2문장.
-3. 사실에 근거한 타임스탬프 표기 [HH:MM].
-4. [핵심] 제공된 [실제 데이터]에 질문에 대한 답변 정보가 전혀 없다면 절대 상상해서 지어내지 말고, '요청하신 정보와 관련된 기록이 없습니다'라고 명확히 답변할 것.
-5. 맺음말 절대 금지."""
+2. 📌 상황 요약 섹션은 반드시 각 이벤트를 별도 줄에 "[오전/오후 HH:MM:SS] 내용" 형식으로 나열할 것. (예: [오전 9:30:00] 손님이 음료 냉장고 앞에서 제품을 고르고 있습니다.) 절대 하나의 통합 문장으로 합치지 말 것.
+3. 실제 데이터의 타임스탬프를 그대로 사용하며 절대 임의로 변경하지 말 것.
+4. 🔍 핵심 분석, 🚨 위험 및 조치 섹션은 각각 최대 2문장.
+5. [핵심] 제공된 [실제 데이터]에 질문에 대한 답변 정보가 전혀 없다면 절대 상상해서 지어내지 말고, '요청하신 정보와 관련된 기록이 없습니다'라고 명확히 답변할 것.
+6. 맺음말 절대 금지."""
 
     def _call_llm(self, system_prompt: str, user_content: str) -> str:
         """LLM 호출 공통 로직"""
@@ -207,14 +235,19 @@ class NLPService:
         보안과 관련 없는 질문(Out-of-Distribution)에 대해 친절하게 거절하며 가이드를 제공합니다.
         """
         if not self.client:
-            return "안녕하세요. 저는 지능형 보안 AI SearchLight입니다. 현재는 보안 및 CCTV 관제와 관련된 질문에 대해서만 도움을 드릴 수 있습니다. 궁금하신 보안 사항이 있다면 말씀해 주세요."
+            return "안녕하세요, 저는 지능형 보안 분석관 SearchLight입니다.\n보안 및 관제 관련 질문이 있으시면 언제든지 말씀해 주세요.\n도움이 필요하신 부분에 대해 전문적으로 안내해 드리겠습니다."
         try:
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": """너는 SearchLight라는 지능형 CCTV 보안 분석 AI야. 
 사용자로부터 보안과 관련 없는 일상적인 질문을 받으면, 자신을 '지능형 보안 분석관 SearchLight'로 소개하며 보안 및 관제 관련 질문을 해달라고 전문적인 톤으로 요청해줘.
-원활한 분석을 위해 사용자가 어떤 질문을 할 수 있는지 아래 예시를 참고해서 마크다운 형식의 가이드를 포함해줘:
+인삿말은 반드시 아래와 같이 한 문장씩 줄바꿈하여 포함해야 해:
+"안녕하세요, 저는 지능형 보안 분석관 SearchLight입니다.
+보안 및 관제 관련 질문이 있으시면 언제든지 말씀해 주세요.
+도움이 필요하신 부분에 대해 전문적으로 안내해 드리겠습니다."
+
+원활한 분석을 위해 사용자가 어떤 질문을 할 수 있는지 아래 가이드를 반드시 포함해줘:
 
 💡 **질문 가이드:**
 - **특정 인물/차량 검색** (예: '빨간색 옷을 입은 사람 찾아줘', '흰색 SUV 차량 포착됐어?')
@@ -224,12 +257,20 @@ class NLPService:
 답변은 간결하면서도 신뢰감 있는 전문적인 어조를 유지해줘."""},
                     {"role": "user", "content": f"사용자 질문: {user_query}"}
                 ],
-                max_tokens=200,
+                max_tokens=350,
                 temperature=0.7
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
-            return "반갑습니다. 지능형 보안 분석관 SearchLight입니다. 무엇을 도와드릴까요?\n\n저는 CCTV 영상 분석과 보안 관제에 최적화되어 있습니다. 원활한 분석을 위해 아래와 같이 보안/관제와 관련된 질문을 입력해 주시기 바랍니다.\n\n💡 **질문 예시:**\n- 인물 검색: '빨간색 옷을 입은 사람 찾아줘'\n- 상황 요약: '어제 오후 주차장 상황 요약해줘'\n- 실시간 확인: '지금 로비에 특이사항 있어?'"
+            return (
+                "안녕하세요, 저는 지능형 보안 분석관 SearchLight입니다.\n"
+                "보안 및 관제 관련 질문이 있으시면 언제든지 말씀해 주세요.\n"
+                "도움이 필요하신 부분에 대해 전문적으로 안내해 드리겠습니다.\n\n"
+                "💡 **질문 가이드:**\n"
+                "- **특정 인물/차량 검색** (예: '빨간색 옷을 입은 사람 찾아줘', '흰색 SUV 차량 포착됐어?')\n"
+                "- **보안 상황 요약** (예: '어제 밤 10시 이후 주차장 상황 요약해줘')\n"
+                "- **실시간 상태 확인** (예: '지금 정문에 특이사항 있어?')"
+            )
 
 
 # 싱글톤 인스턴스 생성
