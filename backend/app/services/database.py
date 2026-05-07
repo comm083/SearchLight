@@ -169,6 +169,40 @@ class SupabaseService:
             print(f"[Supabase Error] 이벤트 목록 조회 실패: {e}")
             return []
 
+    def get_nearest_event(self, timestamp_str: str) -> dict | None:
+        """
+        주어진 시각과 가장 가까운 event 테이블 레코드를 반환합니다.
+        event_intents도 함께 조회합니다.
+        """
+        if not self.supabase:
+            return None
+        try:
+            response = self.supabase.table('event') \
+                .select('*, event_intents(*)') \
+                .order('timestamp') \
+                .execute()
+            if not response.data:
+                return None
+
+            from datetime import datetime
+            target = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+
+            def diff(row):
+                ts = row.get('timestamp')
+                if not ts:
+                    return float('inf')
+                try:
+                    t = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                    return abs((t - target).total_seconds())
+                except Exception:
+                    return float('inf')
+
+            nearest = min(response.data, key=diff)
+            return nearest
+        except Exception as e:
+            print(f"[Supabase Error] nearest event 조회 실패: {e}")
+            return None
+
     def log_feedback(self, history_id: int, feedback_type: str, comment: str = None):
         """
         검색 결과에 대한 사용자 피드백(예: wrong_result)을 기록합니다.

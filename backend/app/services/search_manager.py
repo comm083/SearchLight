@@ -57,7 +57,14 @@ class SearchManager:
 
         # 6. 의도별 검색 및 보고서 생성
         response_data = self._init_response(current_intent, intent_result, time_info, context_used)
-        
+
+        # 시간 정보가 있으면 가장 가까운 이벤트 조회
+        if time_info.get("start_time"):
+            nearest = db_service.get_nearest_event(time_info["start_time"])
+            response_data["nearest_event"] = nearest
+        else:
+            response_data["nearest_event"] = None
+
         if current_intent == "LOCALIZATION":
             response_data = self._handle_localization(query, response_data)
         elif current_intent in ("SUMMARIZATION", "BEHAVIORAL", "CAUSAL", "COUNTING"):
