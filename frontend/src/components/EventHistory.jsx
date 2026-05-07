@@ -6,7 +6,7 @@ const EventHistory = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const [filterTime, setFilterTime] = useState('all');
+  const [filterTime, setFilterTime] = useState(() => new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     fetchEvents();
@@ -14,7 +14,7 @@ const EventHistory = () => {
 
   const fetchEvents = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/v1/alerts/events');
+      const response = await fetch('http://localhost:8000/api/alerts/events?limit=300');
       if (response.ok) {
         const data = await response.json();
         setEvents(data);

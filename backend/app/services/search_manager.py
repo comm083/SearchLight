@@ -36,7 +36,9 @@ class SearchManager:
 
         # 3-1. 일상 질의 처리
         if current_intent == "CHITCHAT":
-            return self._handle_chitchat(query, intent_result)
+            response_data = self._handle_chitchat(query, intent_result)
+            self._finalize(session_id, current_intent, {"raw": "N/A"}, query, response_data)
+            return response_data
 
         # 3-2. 지칭어 및 의도 보정
         context_used = False
@@ -72,13 +74,13 @@ class SearchManager:
         except Exception as e:
             print(f"[OOD Error] {e}")
             answer = (
-                "반갑습니다. 지능형 보안 분석관 SearchLight입니다. 무엇을 도와드릴까요?\n\n"
-                "저는 CCTV 영상 분석과 보안 관제에 최적화되어 있습니다. 원활한 분석을 위해 "
-                "아래와 같이 보안/관제와 관련된 질문을 입력해 주시기 바랍니다.\n\n"
-                "💡 **질문 예시:**\n"
-                "- 인물 검색: '빨간색 옷을 입은 사람 찾아줘'\n"
-                "- 상황 요약: '어제 오후 주차장 상황 요약해줘'\n"
-                "- 실시간 확인: '지금 로비에 특이사항 있어?'"
+                "안녕하세요, 저는 지능형 보안 분석관 SearchLight입니다.\n"
+                "보안 및 관제 관련 질문이 있으시면 언제든지 말씀해 주세요.\n"
+                "도움이 필요하신 부분에 대해 전문적으로 안내해 드리겠습니다.\n\n"
+                "💡 **질문 가이드:**\n"
+                "- **특정 인물/차량 검색** (예: '빨간색 옷을 입은 사람 찾아줘', '흰색 SUV 차량 포착됐어?')\n"
+                "- **보안 상황 요약** (예: '어제 밤 10시 이후 주차장 상황 요약해줘')\n"
+                "- **실시간 상태 확인** (예: '지금 정문에 특이사항 있어?')"
             )
             
         return {
@@ -204,7 +206,8 @@ class SearchManager:
             query=query,
             intent=intent,
             session_id=session_id,
-            ai_report=response.get("ai_report") or response.get("answer")
+            ai_report=response.get("ai_report") or response.get("answer"),
+            results=response.get("results") or []
         )
 
 search_manager = SearchManager()

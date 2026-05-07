@@ -16,7 +16,7 @@ import EventHistory from './components/EventHistory';
 const App = () => {
   const { isLoggedIn, user, login, logout } = useAuth();
   const { 
-    messages, setMessages, recentSearches, currentSessionId, 
+    messages, setMessages, recentSearches, currentSessionId, setCurrentSessionId,
     loading, handleSearch, startNewChat, deleteHistory 
   } = useChat(isLoggedIn, user?.name);
   
@@ -107,6 +107,7 @@ const App = () => {
               setMessages(item.messages);
               setExpandedResults({});
               setCurrentSessionId(item.raw_session_id);
+              setCurrentView('chat');
             }}>
               <div style={{flex: 1, overflow: 'hidden'}}>
                 <div className="item-title">{item.title}</div>

@@ -200,6 +200,14 @@ class RuleBasedIntentClassifier:
                 scores["LOCALIZATION"] *= 0.2  # 과거 언급 시 실시간 점수 대폭 삭감
                 scores["SUMMARIZATION"] += 2.0 # 대신 요약/검색 점수 가산
 
+        # [강제 보정] "N일 전/후" 또는 "어제", "그저께" + 요약 의미 표현 → SUMMARIZATION 강제
+        relative_date_keywords = [r'\d+\s*일\s*(전|후)', "어제", "그저께", "그제", "엊그제", "지난", "저번"]
+        if any(re.search(p, query) for p in relative_date_keywords):
+            scores["SUMMARIZATION"] += 3.0
+            scores["COUNTING"] *= 0.1  # COUNTING 점수 대폭 감산
+            if scores["LOCALIZATION"] > 0:
+                scores["LOCALIZATION"] *= 0.1
+
         total = sum(scores.values())
         if total == 0:
             # 점수가 0이면 SUMMARIZATION 기본값
@@ -284,6 +292,16 @@ class FineTunedIntentClassifier:
                     confidence = scores[best_intent]
                 else:
                     scores["LOCALIZATION"] *= 0.1
+
+            # [강제 보정] "N일 전/후" 또는 "어제", "그저께" → COUNTING 억제, SUMMARIZATION 우선
+            relative_date_keywords = [r'\d+\s*일\s*(전|후)', "어제", "그저께", "그제", "엊그제", "지난", "저번"]
+            if any(re.search(p, query) for p in relative_date_keywords):
+                if best_intent in ("COUNTING", "LOCALIZATION"):
+                    scores["COUNTING"] = scores.get("COUNTING", 0) * 0.1
+                    scores["LOCALIZATION"] = scores.get("LOCALIZATION", 0) * 0.1
+                    scores["SUMMARIZATION"] = scores.get("SUMMARIZATION", 0) + 0.5
+                    best_intent = max(scores, key=scores.get)
+                    confidence = scores[best_intent]
 
             # AI 신뢰도가 낮으면 규칙 기반으로 대체
             if confidence < 0.65 and rule_res.confidence >= 0.50:

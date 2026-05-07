@@ -67,16 +67,23 @@ class VectorDBService:
         self.index.add(embeddings)
         print(f"[Vector DB] 총 {len(self.scene_data)}개 장면 데이터로 인덱스 통합 구축 완료.")
 
-    def search(self, query: str, top_k: int = 3, start_time: str = None, end_time: str = None, threshold: float = 0.45) -> List[Dict]:
+    def search(self, query: str, top_k: int = 3, start_time: str = None, end_time: str = None, threshold: float = 0.35) -> List[Dict]:
         if self.index is None or not self.scene_data:
             return []
 
+        # (Existing parse_dt logic...)
         def parse_dt(dt_str):
             if not dt_str: return None
             try:
-                if 'T' in dt_str:
-                    return datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
-                return datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
+                if 'T' in str(dt_str):
+                    dt = datetime.fromisoformat(str(dt_str).replace('Z', '+00:00'))
+                    # 타임존이 있으면 KST(UTC+9) 기준 naive datetime으로 변환
+                    if dt.tzinfo is not None:
+                        from datetime import timezone, timedelta as td
+                        kst = timezone(td(hours=9))
+                        dt = dt.astimezone(kst).replace(tzinfo=None)
+                    return dt
+                return datetime.strptime(str(dt_str), "%Y-%m-%d %H:%M:%S")
             except:
                 return None
 
@@ -110,7 +117,9 @@ class VectorDBService:
         query_embedding = self.model.encode([query]).astype('float32')
         faiss.normalize_L2(query_embedding)
         
-        search_k = min(len(self.scene_data), 50) 
+        # 검색 범위를 전체로 확장하여 시간 필터링 시 누락되는 일이 없도록 함
+        # 데이터가 수만 건이 넘지 않는 한 IndexFlatIP에서 전체 검색은 충분히 빠릅니다.
+        search_k = len(self.scene_data)
         scores, indices = self.index.search(query_embedding, search_k)
 
         candidates = []
@@ -125,6 +134,15 @@ class VectorDBService:
             
             if len(candidates) >= top_k:
                 break
+
+        # ── 폴백: 유사도 미달이어도 시간 필터 범위 내 데이터가 있으면 최신순으로 반환 ──
+        if not candidates and filtered_data and (start_time or end_time):
+            sorted_filtered = sorted(
+                filtered_data,
+                key=lambda x: x.get("event_date") or "",
+                reverse=True
+            )
+            candidates = [(item, 0.0) for item in sorted_filtered[:top_k]]
 
         if is_oldest or is_newest:
             candidates.sort(
