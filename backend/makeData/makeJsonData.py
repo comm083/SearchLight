@@ -2,7 +2,6 @@ import base64
 import json
 import re
 import os
-import sys
 import tempfile
 import random
 from datetime import datetime, timedelta
@@ -204,17 +203,21 @@ def get_yolo_model(model_type="world"):
             
     return _yolo_models[model_type]
 
-def _detect_target_yolo(frame, model_type="world") -> list:
-    """지정된 YOLO 모델을 사용해 프레임 내 타겟 객체를 탐지합니다."""
+def _detect_target_yolo(frame, model_type="world") -> tuple:
+    """지정된 YOLO 모델을 사용해 프레임 내 타겟 객체를 탐지합니다.
+    Returns: (detected_classes: list, person_count: int)
+    """
     model = get_yolo_model(model_type)
-    # 임계값 0.1 설정 (v8의 경우 기본 클래스만 탐지됨)
     results = model(frame, conf=0.1, verbose=False)
     detected_classes = set()
+    person_count = 0
     for r in results:
         for c in r.boxes.cls:
             class_name = model.names[int(c)]
             detected_classes.add(class_name)
-    return list(detected_classes)
+            if class_name in ("person", "people", "human"):
+                person_count += 1
+    return list(detected_classes), person_count
 
 
 def encode_video_and_extract_clips(video_path: str, model_type="world"):
@@ -243,6 +246,7 @@ def encode_video_and_extract_clips(video_path: str, model_type="world"):
     candidates = []            # (frame_idx, buffer, detected_objs)
     motion_frame_indices = []
     all_detected_objects = set()
+    max_person_count = 0
     cur = 0
 
     while video.isOpened():
@@ -252,12 +256,14 @@ def encode_video_and_extract_clips(video_path: str, model_type="world"):
 
         if cur % interval_motion == 0:
             # YOLO를 이용해 특정 객체 감지
-            detected_objs = _detect_target_yolo(frame, model_type=model_type)
+            detected_objs, p_count = _detect_target_yolo(frame, model_type=model_type)
             has_target = len(detected_objs) > 0
-            
+
             if has_target:
                 all_detected_objects.update(detected_objs)
                 motion_frame_indices.append(cur)
+                if p_count > max_person_count:
+                    max_person_count = p_count
 
             _, buffer = cv2.imencode(".jpg", frame)
             candidates.append((cur, buffer, detected_objs))
@@ -295,7 +301,7 @@ def encode_video_and_extract_clips(video_path: str, model_type="world"):
         step = len(base64frames) / MAX_FRAMES
         base64frames = [base64frames[int(i * step)] for i in range(MAX_FRAMES)]
 
-    print(f"  [프레임] 총 {cur}프레임 / 분석용 {len(base64frames)}장 / 모션 감지 {len(motion_frame_indices)}회")
+    print(f"  [프레임] 총 {cur}프레임 / 분석용 {len(base64frames)}장 / 모션 감지 {len(motion_frame_indices)}회 / 최대 인원 {max_person_count}명")
 
     # 모션 감지 구간 → 클립 추출
     person_clips = []
@@ -339,7 +345,7 @@ def encode_video_and_extract_clips(video_path: str, model_type="world"):
 
         video2.release()
 
-    return base64frames, person_clips, start_timestamp, list(all_detected_objects)
+    return base64frames, person_clips, start_timestamp, list(all_detected_objects), max_person_count
 
 
 # ─────────────────────────────────────────────
@@ -388,6 +394,48 @@ JSON으로만 출력하세요 (설명 없이):
             "time_sent": "", "count_sent": "", "action_sent": "",
             "info_sent": summary[:200], "error_sent": ""
         }
+
+
+SITUATION_LABELS = ("falling", "break", "assault", "smoking", "disaster")
+
+def classify_situation(client: OpenAI, summary: str, detected_objects: list) -> str | None:
+    """GPT로 이벤트 상황을 5가지 유형 중 하나로 분류합니다. 해당 없으면 None."""
+    obj_str = ", ".join(detected_objects) if detected_objects else "없음"
+    prompt = f"""다음은 CCTV 영상 분석 요약과 감지된 객체 목록입니다.
+
+[요약]: {summary}
+[감지 객체]: {obj_str}
+
+위 내용을 바탕으로 아래 5가지 상황 유형 중 가장 적합한 하나만 골라 JSON으로 출력하세요.
+유형 없이 일반 상황이라면 null을 반환하세요.
+
+유형:
+- falling: 사람이 쓰러지거나 넘어지는 상황
+- break: 기물 파손, 유리 깨짐 등 파손 상황
+- assault: 폭행, 싸움, 위협 등 폭력 상황
+- smoking: 흡연 행위 감지
+- disaster: 화재, 홍수, 재해 등 재난 상황
+
+출력 형식 (JSON만, 설명 없이):
+{{"situation": "falling"}}  또는  {{"situation": null}}"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=50,
+        )
+        raw = response.choices[0].message.content.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        data = json.loads(raw)
+        val = data.get("situation")
+        return val if val in SITUATION_LABELS else None
+    except Exception as e:
+        print(f"  [상황 분류 실패] {e}")
+        return None
 
 
 def analyze_frames(image_list: list, detected_objects: list) -> dict:
@@ -455,23 +503,39 @@ def upload_clip(supabase: Client, clip_path: str, storage_name: str) -> str:
 def print_schema_sql():
     print("""
 -- ================================================================
--- SearchLight CCTV 스키마
+-- SearchLight CCTV 스키마 (v2)
 -- Supabase 대시보드 > SQL Editor 에서 아래 SQL을 실행하세요.
 -- ================================================================
 
--- 1. CCTV 영상 분석 결과 테이블
-CREATE TABLE IF NOT EXISTS cctv_videos (
+-- 1. 이벤트 없는 일반 구간 테이블
+CREATE TABLE IF NOT EXISTS normal (
     id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
-    video_filename  TEXT        NOT NULL UNIQUE,
-    event_date      TIMESTAMPTZ,                      -- OCR로 읽은 영상 시작 시각
+    video_filename  TEXT        NOT NULL,
+    timestamp       TIMESTAMPTZ,                      -- OCR로 읽은 영상 시작 시각
     summary         TEXT,                             -- GPT 생성 요약
     created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. 의도별 설명 문장 테이블 (같은 video_id로 연결)
-CREATE TABLE IF NOT EXISTS cctv_intents (
+-- 2. 이벤트 발생 구간 테이블
+CREATE TYPE IF NOT EXISTS situation_type AS ENUM (
+    'falling', 'break', 'assault', 'smoking', 'disaster'
+);
+
+CREATE TABLE IF NOT EXISTS event (
+    id              UUID            DEFAULT gen_random_uuid() PRIMARY KEY,
+    video_filename  TEXT            NOT NULL,
+    timestamp       TIMESTAMPTZ,                      -- OCR로 읽은 영상 시작 시각
+    summary         TEXT,                             -- GPT 생성 요약
+    count_people    INT             DEFAULT 0,        -- YOLO로 감지된 최대 인원 수
+    situation       situation_type,                   -- 이벤트 유형 (NULL 허용)
+    clip_url        TEXT,                             -- Supabase Storage 첫 번째 클립 URL
+    created_at      TIMESTAMPTZ     DEFAULT NOW()
+);
+
+-- 3. 이벤트 의도별 설명 문장 테이블
+CREATE TABLE IF NOT EXISTS event_intents (
     id          UUID    DEFAULT gen_random_uuid() PRIMARY KEY,
-    video_id    UUID    REFERENCES cctv_videos(id) ON DELETE CASCADE,
+    event_id    UUID    REFERENCES event(id) ON DELETE CASCADE,
     time_sent   TEXT,   -- 시간 관련 설명 문장
     count_sent  TEXT,   -- 사람 수 관련 설명 문장
     action_sent TEXT,   -- 행동 관련 설명 문장
@@ -480,22 +544,13 @@ CREATE TABLE IF NOT EXISTS cctv_intents (
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. 사람 감지 클립 테이블
-CREATE TABLE IF NOT EXISTS person_clips (
-    id          UUID    DEFAULT gen_random_uuid() PRIMARY KEY,
-    video_id    UUID    REFERENCES cctv_videos(id) ON DELETE CASCADE,
-    clip_url    TEXT    NOT NULL,        -- Supabase Storage 공개 URL
-    start_sec   FLOAT,                  -- 클립 시작 (초)
-    end_sec     FLOAT,                  -- 클립 종료 (초)
-    created_at  TIMESTAMPTZ DEFAULT NOW()
-);
-
 -- 4. 인덱스
-CREATE INDEX IF NOT EXISTS idx_cctv_videos_event_date ON cctv_videos(event_date DESC);
-CREATE INDEX IF NOT EXISTS idx_cctv_intents_video_id  ON cctv_intents(video_id);
-CREATE INDEX IF NOT EXISTS idx_person_clips_video_id  ON person_clips(video_id);
+CREATE INDEX IF NOT EXISTS idx_normal_timestamp      ON normal(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_event_timestamp       ON event(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_event_situation       ON event(situation);
+CREATE INDEX IF NOT EXISTS idx_event_intents_event_id ON event_intents(event_id);
 
--- 4. Storage 버킷 생성 (이미 있으면 건너뜀)
+-- 5. Storage 버킷 생성 (이미 있으면 건너뜀)
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('cctv-clips', 'cctv-clips', true)
 ON CONFLICT (id) DO NOTHING;
@@ -511,14 +566,8 @@ def process_video(video_path: str, model_type="world"):
     video_file = os.path.basename(video_path)
     print(f"\n[처리] {video_file} (모델: {model_type})")
 
-    # 중복 처리 방지 (로컬 파일 저장 시에는 건너뛰지 않도록 주석 처리하거나 로직 변경 가능)
-    # existing = supabase.table('cctv_videos').select('id').eq('video_filename', video_file).execute()
-    # if existing.data:
-    #     print("  -> 이미 처리된 영상입니다. 건너뜁니다.")
-    #     return
-
-    # 프레임 추출 + 클립 추출 + 타임스탬프 OCR (YOLO로 타겟 객체도 반환)
-    frames, person_clips, start_timestamp, detected_objects = encode_video_and_extract_clips(video_path, model_type=model_type)
+    # 프레임 추출 + 클립 추출 + 타임스탬프 OCR
+    frames, person_clips, start_timestamp, detected_objects, max_person_count = encode_video_and_extract_clips(video_path, model_type=model_type)
     if not frames:
         print("  -> 프레임을 추출할 수 없습니다.")
         return
@@ -527,7 +576,8 @@ def process_video(video_path: str, model_type="world"):
         start_timestamp = _generate_random_timestamp()
         print(f"  [OCR 실패] 랜덤 타임스탬프 할당: {start_timestamp}")
 
-    print(f"  분석 프레임: {len(frames)}장 | 사람 감지 클립: {len(person_clips)}개 | 시작 시각: {start_timestamp}")
+    has_event = len(person_clips) > 0
+    print(f"  분석 프레임: {len(frames)}장 | 이벤트: {'있음' if has_event else '없음'} | 시작 시각: {start_timestamp}")
 
     # GPT 분석
     print(f"  GPT 분석 중... ({len(frames)}프레임 전송)")
@@ -537,82 +587,74 @@ def process_video(video_path: str, model_type="world"):
         print(f"  -> [GPT 실패] {type(e).__name__}: {e}")
         video_info = {"summary": f"GPT 분석 실패: {e}", "frames": []}
 
-    # 의도별 문장 생성 (GPT)
-    print("  의도별 문장 생성 중 (GPT)...")
+    summary = video_info.get("summary", "")
     client_obj = OpenAI(api_key=api_key)
-    intent_sentences = generate_intent_sentences(client_obj, video_info.get("summary", ""))
 
-    # --- 기존 Supabase 업로드 로직 (임시 주석 처리) ---
-    """
-    # cctv_videos 저장 (frames 컬럼 제거)
-    result = supabase.table('cctv_videos').insert({
-        "video_filename": video_file,
-        "event_date":     start_timestamp,
-        "summary":        video_info.get("summary", ""),
-    }).execute()
-    video_id = result.data[0]['id']
-    print(f"  -> cctv_videos 저장 완료 (id: {video_id})")
-
-    try:
-        supabase.table('cctv_intents').insert({
-            "video_id":    video_id,
-            "time_sent":   intent_sentences.get("time_sent", ""),
-            "count_sent":  intent_sentences.get("count_sent", ""),
-            "action_sent": intent_sentences.get("action_sent", ""),
-            "info_sent":   intent_sentences.get("info_sent", ""),
-            "error_sent":  intent_sentences.get("error_sent", ""),
+    if not has_event:
+        # ── 이벤트 없음: normal 테이블에 저장 ──
+        result = supabase.table('normal').insert({
+            "video_filename": video_file,
+            "timestamp":      start_timestamp,
+            "summary":        summary,
         }).execute()
-        print(f"  -> cctv_intents 저장 완료")
-    except Exception as e:
-        print(f"  -> [cctv_intents 저장 실패] {e}")
-
-    # 사람 감지 클립 → Storage 업로드 → person_clips 저장
-    for i, (s_sec, e_sec, clip_path) in enumerate(person_clips):
-        storage_name = f"{os.path.splitext(video_file)[0]}_clip{i+1}_{int(s_sec)}s-{int(e_sec)}s.mp4"
-        try:
-            clip_url = upload_clip(supabase, clip_path, storage_name)
-            supabase.table('person_clips').insert({
-                "video_id":  video_id,
-                "clip_url":  clip_url,
-                "start_sec": s_sec,
-                "end_sec":   e_sec,
-            }).execute()
-            print(f"  -> 클립 업로드: {storage_name} ({s_sec}s ~ {e_sec}s)")
-        except Exception as e:
-            print(f"  -> 클립 업로드 실패: {e}")
-        finally:
-            if os.path.exists(clip_path):
-                os.remove(clip_path)
-    """
-    # --------------------------------------------------
-
-    # 모델 성능 비교를 위해 Supabase 대신 로컬 JSON 파일에 결과 저장
-    output_filename = f"model_{model_type}_data.json"
-    
-    output_data = {
-        "video_filename": video_file,
-        "event_date": start_timestamp,
-        "summary": video_info.get("summary", ""),
-        "intents": intent_sentences,
-        "clips": [{"start_sec": s, "end_sec": e, "local_path": p} for s, e, p in person_clips]
-    }
-    
-    # 기존 파일이 있으면 읽어서 배열에 추가
-    if os.path.exists(output_filename):
-        try:
-            with open(output_filename, 'r', encoding='utf-8') as f:
-                existing_data = json.load(f)
-        except json.JSONDecodeError:
-            existing_data = []
+        print(f"  -> normal 저장 완료 (id: {result.data[0]['id']})")
     else:
-        existing_data = []
-        
-    existing_data.append(output_data)
-    
-    with open(output_filename, 'w', encoding='utf-8') as f:
-        json.dump(existing_data, f, ensure_ascii=False, indent=2)
-        
-    print(f"  -> Supabase 업로드를 생략하고 '{output_filename}'에 분석 결과를 임시 저장했습니다.")
+        # ── 이벤트 있음: event 테이블에 저장 ──
+        print("  상황 분류 중 (GPT)...")
+        situation = classify_situation(client_obj, summary, detected_objects)
+        print(f"  -> 상황: {situation or '미분류'}")
+
+        # 첫 번째 클립 Storage 업로드 → URL 획득
+        clip_url = None
+        if person_clips:
+            s_sec, e_sec, clip_path = person_clips[0]
+            storage_name = f"{os.path.splitext(video_file)[0]}_clip1_{int(s_sec)}s-{int(e_sec)}s.mp4"
+            try:
+                clip_url = upload_clip(supabase, clip_path, storage_name)
+                print(f"  -> 클립 업로드: {storage_name} ({s_sec}s ~ {e_sec}s)")
+            except Exception as e:
+                print(f"  -> 클립 업로드 실패: {e}")
+            finally:
+                if os.path.exists(clip_path):
+                    os.remove(clip_path)
+            # 나머지 클립은 업로드만 (URL 미저장)
+            for i, (s_sec, e_sec, clip_path) in enumerate(person_clips[1:], start=2):
+                storage_name = f"{os.path.splitext(video_file)[0]}_clip{i}_{int(s_sec)}s-{int(e_sec)}s.mp4"
+                try:
+                    upload_clip(supabase, clip_path, storage_name)
+                    print(f"  -> 클립 업로드: {storage_name} ({s_sec}s ~ {e_sec}s)")
+                except Exception as e:
+                    print(f"  -> 클립 업로드 실패: {e}")
+                finally:
+                    if os.path.exists(clip_path):
+                        os.remove(clip_path)
+
+        result = supabase.table('event').insert({
+            "video_filename": video_file,
+            "timestamp":      start_timestamp,
+            "summary":        summary,
+            "count_people":   max_person_count,
+            "situation":      situation,
+            "clip_url":       clip_url,
+        }).execute()
+        event_id = result.data[0]['id']
+        print(f"  -> event 저장 완료 (id: {event_id}, clip_url: {'있음' if clip_url else '없음'})")
+
+        # 의도별 문장 생성 → event_intents 저장
+        print("  의도별 문장 생성 중 (GPT)...")
+        intent_sentences = generate_intent_sentences(client_obj, summary)
+        try:
+            supabase.table('event_intents').insert({
+                "event_id":    event_id,
+                "time_sent":   intent_sentences.get("time_sent", ""),
+                "count_sent":  intent_sentences.get("count_sent", ""),
+                "action_sent": intent_sentences.get("action_sent", ""),
+                "info_sent":   intent_sentences.get("info_sent", ""),
+                "error_sent":  intent_sentences.get("error_sent", ""),
+            }).execute()
+            print("  -> event_intents 저장 완료")
+        except Exception as e:
+            print(f"  -> [event_intents 저장 실패] {e}")
 
 
 # ─────────────────────────────────────────────
