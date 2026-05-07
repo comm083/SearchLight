@@ -1,0 +1,35 @@
+[
+  {
+    "video_filename": "cctv0809.mp4",
+    "event_date": "2026-00-04 27:08:00",
+    "model_type": "v8",
+    "summary": "주어진 영상은 2026년 4월 27일 오전에 찍힌 것으로, CCTV 화면에 시간대별로 변화를 보여줍니다. 처음 두 프레임(08:00:00, 08:10:05)에서는 공간이 비어 있고 조명이 약간 어두운 상태입니다. 08:20:10에도 비슷한 상황이 계속되며, 추가 인물 출입은 없습니다. 08:25:32 즈음에 한 사람이 등장하며, 이 사람은 바지와 긴팔 옷을 입고 있는 것으로 보입니다. 이 인물은 간단히 내부를 확인하거나 뭔가를 가져가려는 행동을 하며, 특히 음식이나 음료가 있는 공간에 주목하고 있습니다. 08:36:17에는 다시 이 인물이 음료나 간식을 찾고 있는 모습을 볼 수 있습니다. 이 이후로는 별다른 이상 상황은 보이지 않으며, 인물은 08:46:31 이후로 사라진 것으로 보입니다. 현재까지 위험이나 긴급 상황은 없습니다. 추후에 추가적인 주의가 필요할 수 있지만, 지금으로써는 일상적인 출입용으로 보입니다.",
+    "intents": {
+      "time_sent": "영상은 2026년 4월 27일 오전 8시부터 8시 46분까지의 시간대를 포괄하고 있습니다.",
+      "count_sent": "영상에는 총 한 명의 인물이 등장합니다.",
+      "action_sent": "등장한 인물은 음료나 간식을 찾는 행동을 보였습니다.",
+      "info_sent": "현재까지 위험이나 긴급 상황은 없으며, 일상적인 출입으로 보입니다.",
+      "error_sent": "영상에서 카메라나 시스템의 이상은 발견되지 않았습니다."
+    },
+    "events": [
+      {
+        "event_id": 1,
+        "trigger_frame": 45623,
+        "trigger_time_sec": 1522.27,
+        "trigger_timestamp": "2026-00-04 27:08:00",
+        "detected_objects": [
+          "person"
+        ],
+        "video_clip": "C:\\SearchLight\\backend\\makeData\\..\\static\\eventData\\cctv0809\\event_045623.mp4"
+      }
+    ],
+    "idle_snapshots": [
+      "C:\\SearchLight\\backend\\makeData\\..\\static\\eventData\\cctv0809\\idle_000000.jpg",
+      "C:\\SearchLight\\backend\\makeData\\..\\static\\eventData\\cctv0809\\idle_017982.jpg",
+      "C:\\SearchLight\\backend\\makeData\\..\\static\\eventData\\cctv0809\\idle_035964.jpg",
+      "C:\\SearchLight\\backend\\makeData\\..\\static\\eventData\\cctv0809\\idle_064692.jpg",
+      "C:\\SearchLight\\backend\\makeData\\..\\static\\eventData\\cctv0809\\idle_082674.jpg",
+      "C:\\SearchLight\\backend\\makeData\\..\\static\\eventData\\cctv0809\\idle_100656.jpg"
+    ]
+  }
+]
