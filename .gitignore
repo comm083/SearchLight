@@ -40,4 +40,5 @@ requirements_temp.txt
 
 backend\static\sampleData
 samplevideo.mp4
-analyze_sbert.py
+analyze_sbert.py
+cctv0809.mp4
