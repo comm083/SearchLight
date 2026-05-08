@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Plus, Search, Shield, Clock, Settings, User, MoreVertical, LogIn, LogOut, Mic, Square, X, Archive
+  Plus, Search, Shield, Clock, Settings, User, MoreVertical, LogIn, LogOut, Mic, Square, X, Archive, Volume2, VolumeX
 } from 'lucide-react';
 
 // Hooks
@@ -12,6 +12,7 @@ import { useVoice } from './hooks/useVoice';
 import MessageItem from './components/chat/MessageItem';
 import ResultCard from './components/chat/ResultCard';
 import EventHistory from './components/EventHistory';
+import LoginModal from './components/LoginModal';
 
 const App = () => {
   const { isLoggedIn, user, login, logout } = useAuth();
@@ -25,8 +26,8 @@ const App = () => {
   const [expandedResults, setExpandedResults] = useState({});
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [currentView, setCurrentView] = useState('chat');
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
+  const [isTtsEnabled, setIsTtsEnabled] = useState(true);
+
   const chatEndRef = useRef(null);
 
   const [sidebarWidth, setSidebarWidth] = useState(260);
@@ -75,19 +76,12 @@ const App = () => {
 
   const onSearch = async (text = query) => {
     const report = await handleSearch(text);
-    if (report) speak(report);
+    if (report && isTtsEnabled) speak(report);
     setQuery('');
   };
 
-  const handleLoginSubmit = () => {
-    if (loginEmail === 'rssgrace11@gmail.com' && loginPassword === '1234') {
-      login('관리자', "보안 분석관");
-      setLoginEmail('');
-      setLoginPassword('');
-      setShowLoginModal(false);
-    } else {
-      alert('아이디 또는 비밀번호가 일치하지 않습니다.');
-    }
+  const handleLoginSuccess = (name, role) => {
+    login(name, role);
   };
 
   return (
@@ -178,45 +172,25 @@ const App = () => {
 
       {/* Login Modal */}
       {showLoginModal && (
-        <div className="modal-overlay" onClick={() => setShowLoginModal(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h2 className="modal-title">시스템 접속</h2>
-            <div style={{marginBottom: '15px'}}>
-              <label style={{display: 'block', fontSize: '12px', color: '#9ca3af', marginBottom: '5px'}}>이메일</label>
-              <input 
-                className="modal-input"
-                value={loginEmail}
-                onChange={e => setLoginEmail(e.target.value)}
-                placeholder="rssgrace11@gmail.com"
-                style={{marginBottom: '0'}}
-                autoFocus
-              />
-            </div>
-            <div style={{marginBottom: '20px'}}>
-              <label style={{display: 'block', fontSize: '12px', color: '#9ca3af', marginBottom: '5px'}}>비밀번호</label>
-              <input 
-                className="modal-input"
-                type="password"
-                value={loginPassword}
-                onChange={e => setLoginPassword(e.target.value)}
-                onKeyPress={e => e.key === 'Enter' && handleLoginSubmit()}
-                placeholder="****"
-                style={{marginBottom: '0'}}
-              />
-            </div>
-            <div className="modal-buttons">
-              <button className="modal-btn cancel" onClick={() => setShowLoginModal(false)}>취소</button>
-              <button className="modal-btn confirm" onClick={handleLoginSubmit}>접속</button>
-            </div>
-          </div>
-        </div>
+        <LoginModal
+          onClose={() => setShowLoginModal(false)}
+          onLogin={handleLoginSuccess}
+        />
       )}
 
       {/* Main Content */}
       <main className="main-content" style={{ overflowY: 'auto' }}>
         <header className="header">
           <div className="header-logo" onClick={() => setCurrentView('chat')} style={{cursor: 'pointer'}}><Shield size={18} color="#3b82f6" /> SearchLight <MoreVertical size={14} /></div>
-          <div style={{display: 'flex', gap: '20px'}}>
+          <div style={{display: 'flex', alignItems: 'center', gap: '20px'}}>
+             <button 
+               className="icon-btn" 
+               onClick={() => setIsTtsEnabled(!isTtsEnabled)}
+               title={isTtsEnabled ? "음성 읽어주기 끄기" : "음성 읽어주기 켜기"}
+               style={{ color: isTtsEnabled ? '#3b82f6' : '#9ca3af', display: 'flex', alignItems: 'center' }}
+             >
+               {isTtsEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+             </button>
              <Settings size={18} cursor="pointer" className="icon-btn" />
              <User size={18} cursor="pointer" className="icon-btn" />
           </div>
