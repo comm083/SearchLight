@@ -8,7 +8,11 @@
       "PowerShell(& \"c:\\\\SearchLight\\\\SearchLight\\\\Scripts\\\\pip.exe\" install supabase easyocr 2>&1)",
       "Bash(c:/SearchLight/SearchLight/Scripts/python.exe -c ' *)",
       "Bash(python -c ' *)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(SearchLight/Scripts/python.exe backend/makeData/makeJsonData.py --video backend/static/mp4Data/samplevideo.mp4 --model v8)",
+      "Read(//c/Users/Administrator/AppData/Local/Temp/claude/c--SearchLight/aa88ddb0-3a94-49a4-8d9c-75160915bc18/tasks/**)",
+      "Bash(SearchLight/Scripts/python.exe backend/makeData/makeJsonData.py --dir backend/static/mp4Data --model v8)",
+      "Bash(SearchLight/Scripts/python.exe -c \"import torch; print\\(torch.__version__\\); print\\('CUDA:', torch.cuda.is_available\\(\\)\\)\")"
     ]
   }
 }
