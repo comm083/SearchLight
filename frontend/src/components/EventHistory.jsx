@@ -1,10 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Calendar, Filter, Download, Play, Share2, MapPin, Clock, User, Car } from 'lucide-react';
 
+const PERIOD_OPTIONS = [
+  { label: '일일 이벤트', value: 'daily' },
+  { label: '주간 이벤트', value: 'weekly' },
+  { label: '한달 이벤트', value: 'monthly' },
+  { label: '모든 이벤트', value: 'all' },
+];
+
 const EventHistory = () => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [periodFilter, setPeriodFilter] = useState('all');
 
   const [filterTime, setFilterTime] = useState(() => new Date().toISOString().split('T')[0]);
 
@@ -32,13 +41,34 @@ const EventHistory = () => {
     
     if (!matchesSearch) return false;
 
+    // 날짜 직접 선택 필터
     if (filterTime !== 'all') {
       const formattedEventDate = e.timestamp ? e.timestamp.split('T')[0].split(' ')[0] : '';
-      return formattedEventDate === filterTime;
+      if (formattedEventDate !== filterTime) return false;
     }
-    
+
+    // 기간 필터
+    if (periodFilter !== 'all') {
+      const now = new Date();
+      const eventDate = new Date(e.timestamp);
+      if (periodFilter === 'daily') {
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        return eventDate >= today;
+      } else if (periodFilter === 'weekly') {
+        const weekAgo = new Date(now);
+        weekAgo.setDate(now.getDate() - 7);
+        return eventDate >= weekAgo;
+      } else if (periodFilter === 'monthly') {
+        const monthAgo = new Date(now);
+        monthAgo.setMonth(now.getMonth() - 1);
+        return eventDate >= monthAgo;
+      }
+    }
+
     return true;
   });
+
+  const currentPeriodLabel = PERIOD_OPTIONS.find(o => o.value === periodFilter)?.label || '모든 이벤트';
 
   const handleDownload = () => {
     if (filteredEvents.length === 0) {
@@ -109,17 +139,45 @@ const EventHistory = () => {
             }}
           />
         </div>
-        <button 
-          onClick={() => setFilterTime('all')}
-          style={{ 
-            backgroundColor: filterTime === 'all' ? 'rgba(59, 130, 246, 0.2)' : '#1e293b', 
-            border: filterTime === 'all' ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid #334155', 
-            color: filterTime === 'all' ? '#60a5fa' : '#fff', 
-            padding: '0 16px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' 
-          }}
-        >
-          <Filter size={16} color={filterTime === 'all' ? '#60a5fa' : '#9ca3af'} /> 모든 이벤트
-        </button>
+        {/* 기간 필터 드롭다운 */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setShowDropdown(prev => !prev)}
+            style={{
+              backgroundColor: periodFilter !== 'all' ? 'rgba(59, 130, 246, 0.2)' : '#1e293b',
+              border: periodFilter !== 'all' ? '1px solid rgba(59, 130, 246, 0.5)' : '1px solid #334155',
+              color: periodFilter !== 'all' ? '#60a5fa' : '#fff',
+              padding: '0 16px', height: '100%', borderRadius: '8px',
+              display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', whiteSpace: 'nowrap'
+            }}
+          >
+            <Filter size={16} color={periodFilter !== 'all' ? '#60a5fa' : '#9ca3af'} />
+            {currentPeriodLabel}
+          </button>
+          {showDropdown && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 100,
+              backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px',
+              overflow: 'hidden', minWidth: '160px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+            }}>
+              {PERIOD_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => { setPeriodFilter(opt.value); setShowDropdown(false); }}
+                  style={{
+                    width: '100%', textAlign: 'left', padding: '12px 16px',
+                    backgroundColor: periodFilter === opt.value ? 'rgba(59,130,246,0.2)' : 'transparent',
+                    color: periodFilter === opt.value ? '#60a5fa' : '#e2e8f0',
+                    border: 'none', cursor: 'pointer', fontSize: '14px',
+                    borderBottom: '1px solid #334155'
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div style={{ fontSize: '14px', color: '#9ca3af', marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid #1e293b' }}>
