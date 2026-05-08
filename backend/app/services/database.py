@@ -10,7 +10,7 @@ from app.core.config import settings
 class SupabaseService:
     def __init__(self):
         url = settings.SUPABASE_URL
-        key = settings.SUPABASE_KEY
+        key = settings.SUPABASE_SERVICE_KEY or settings.SUPABASE_KEY
         if not url or not key:
             print("[Warning] Supabase 설정이 없습니다. 로그 저장 기능이 비활성화됩니다.")
             self.supabase = None
@@ -147,22 +147,24 @@ class SupabaseService:
         영상 보관함(Event History)에 표시할 이벤트 데이터를 모두 가져옵니다.
         """
         try:
-            query = self.supabase.table('cctv_vectors').select('id, content, metadata').order('metadata->timestamp', desc=True).limit(limit)
-            response = query.execute()
-            
+            response = self.supabase.table('event') \
+                .select('id, summary, timestamp, video_filename, situation, clip_url') \
+                .order('timestamp', desc=True) \
+                .limit(limit) \
+                .execute()
+
             events = []
             if response.data:
                 for item in response.data:
-                    metadata = item.get('metadata', {})
-                    # confidence 값 등 UI에 필요한 항목들 추출 (없을 경우 기본값)
                     events.append({
-                        "id": item.get('id', str(len(events))),
-                        "title": item.get('content', '보안 이벤트 기록'),
-                        "location": metadata.get('location', '미상'),
-                        "timestamp": metadata.get('timestamp', ''),
-                        "image_path": metadata.get('image_path', ''),
-                        "tag": metadata.get('person', '') if metadata.get('person') else 'Event',
-                        "confidence": metadata.get('confidence', 90)
+                        "id": item.get('id'),
+                        "title": item.get('summary', '보안 이벤트 기록'),
+                        "location": item.get('video_filename', '미상'),
+                        "timestamp": item.get('timestamp', ''),
+                        "clip_url": item.get('clip_url'),
+                        "tag": item.get('situation', 'normal'),
+                        "image_path": None,
+                        "confidence": None,
                     })
             return events
         except Exception as e:
