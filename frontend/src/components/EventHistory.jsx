@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Calendar, Filter, Download, Play, Share2, MapPin, Clock, User, Car } from 'lucide-react';
+import { Search, Filter, Download, Play, MapPin, Clock, AlertTriangle } from 'lucide-react';
 
 const EventHistory = () => {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [modalUrl, setModalUrl] = useState(null);
 
-  const [filterTime, setFilterTime] = useState(() => new Date().toISOString().split('T')[0]);
+  const [filterTime, setFilterTime] = useState('all');
 
   useEffect(() => {
     fetchEvents();
@@ -18,17 +20,21 @@ const EventHistory = () => {
       if (response.ok) {
         const data = await response.json();
         setEvents(data);
+        setFetchError(null);
+      } else {
+        setFetchError(`서버 오류: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
       console.error('Failed to fetch events:', error);
+      setFetchError(`네트워크 오류: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   const filteredEvents = events.filter(e => {
-    const matchesSearch = e.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          e.location.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (e.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (e.location || '').toLowerCase().includes(searchTerm.toLowerCase());
     
     if (!matchesSearch) return false;
 
@@ -73,6 +79,7 @@ const EventHistory = () => {
   };
 
   return (
+    <>
     <div style={{ padding: '30px 40px', maxWidth: '1200px', margin: '0 auto', width: '100%', color: '#f3f4f6' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
         <div>
@@ -126,68 +133,107 @@ const EventHistory = () => {
         총 {filteredEvents.length}개의 이벤트
       </div>
 
+      {fetchError && (
+        <div style={{ backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', color: '#f87171', fontSize: '14px' }}>
+          ⚠️ {fetchError}
+        </div>
+      )}
+
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>이벤트를 불러오는 중입니다...</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {filteredEvents.map((event, idx) => (
+          {filteredEvents.map((event, idx) => {
+            const hasClip = !!event.clip_url;
+            const isAbnormal = event.tag && event.tag !== 'normal';
+            return (
             <div key={idx} style={{ backgroundColor: '#1e293b', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'row', border: '1px solid #334155' }}>
               {/* Thumbnail */}
-              <div style={{ width: '280px', height: '200px', position: 'relative', flexShrink: 0 }}>
-                <img 
-                  src={`http://localhost:8000${event.image_path}`} 
-                  alt="이벤트 썸네일" 
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  onError={(e) => { e.target.src = 'https://via.placeholder.com/280x200?text=No+Image' }}
-                />
-                
-                {/* Tag */}
-                <div style={{ position: 'absolute', top: '12px', left: '12px', backgroundColor: 'rgba(0,0,0,0.6)', padding: '4px 10px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '500', backdropFilter: 'blur(4px)', color: event.tag.includes('Person') ? '#60a5fa' : '#fbbf24' }}>
-                  {event.tag.includes('Person') ? <User size={12} /> : <Car size={12} />}
-                  {event.tag === 'Person' ? '사람' : event.tag === 'Vehicle' ? '차량' : event.tag || '이벤트'}
-                </div>
-                
-                {/* Confidence */}
-                <div style={{ position: 'absolute', top: '12px', right: '12px', backgroundColor: 'rgba(0,0,0,0.6)', padding: '4px 8px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', backdropFilter: 'blur(4px)', color: '#fff' }}>
-                  {event.confidence}%
-                </div>
+              <div
+                style={{ width: '280px', height: '200px', position: 'relative', flexShrink: 0, cursor: hasClip ? 'pointer' : 'default', backgroundColor: '#0b0f19' }}
+                onClick={() => hasClip && setModalUrl(event.clip_url)}
+              >
+                {hasClip ? (
+                  <video
+                    src={event.clip_url}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    muted
+                    preload="metadata"
+                  />
+                ) : (
+                  <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563', fontSize: '13px' }}>클립 없음</div>
+                )}
+
+                {hasClip && (
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.25)' }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ width: 0, height: 0, borderTop: '9px solid transparent', borderBottom: '9px solid transparent', borderLeft: '16px solid #111', marginLeft: '4px' }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* 상황 태그 */}
+                {isAbnormal && (
+                  <div style={{ position: 'absolute', top: '12px', left: '12px', backgroundColor: 'rgba(239,68,68,0.85)', padding: '4px 10px', borderRadius: '20px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: '600', color: '#fff' }}>
+                    <AlertTriangle size={11} /> {event.tag}
+                  </div>
+                )}
               </div>
 
               {/* Content */}
               <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#fff', margin: '0 0 12px 0' }}>{event.title}</h3>
-                  <span style={{ fontSize: '12px', color: '#6b7280' }}>CAM-00{Math.floor(Math.random() * 5) + 1}</span>
+                  <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#fff', margin: '0 0 12px 0', lineHeight: '1.4' }}>{event.title}</h3>
                 </div>
-                
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>
                   <MapPin size={14} /> {event.location}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '14px', marginBottom: 'auto' }}>
                   <Clock size={14} /> {event.timestamp ? new Date(event.timestamp).toLocaleString('ko-KR') : ''}
                 </div>
-                
+
                 {/* Actions */}
-                <div style={{ display: 'flex', gap: '16px', marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '20px' }}>
-                  <button style={{ backgroundColor: '#60a5fa', color: '#0f172a', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }} onClick={() => alert('영상 보기 연동 준비 중')}>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '20px' }}>
+                  <button
+                    style={{ backgroundColor: hasClip ? '#60a5fa' : '#334155', color: hasClip ? '#0f172a' : '#6b7280', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: hasClip ? 'pointer' : 'not-allowed', fontSize: '13px' }}
+                    onClick={() => hasClip && setModalUrl(event.clip_url)}
+                    disabled={!hasClip}
+                  >
                     <Play size={14} /> 영상 보기
-                  </button>
-                  <button style={{ backgroundColor: 'transparent', color: '#e2e8f0', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', fontSize: '13px' }} onClick={() => alert('다운로드 기능 준비 중')}>
-                    다운로드
-                  </button>
-                  <button style={{ backgroundColor: 'transparent', color: '#e2e8f0', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: '500', cursor: 'pointer', fontSize: '13px' }} onClick={() => alert('공유 기능 준비 중')}>
-                    공유하기
                   </button>
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
           {filteredEvents.length === 0 && !loading && (
             <div style={{ textAlign: 'center', padding: '40px', color: '#6b7280' }}>이벤트를 찾을 수 없습니다.</div>
           )}
         </div>
       )}
     </div>
+
+    {/* 영상 모달 */}
+
+    {modalUrl && (
+      <div
+        style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.92)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}
+        onClick={() => setModalUrl(null)}
+      >
+        <video
+          src={modalUrl}
+          style={{ maxWidth: '90%', maxHeight: '85%', borderRadius: '10px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)' }}
+          controls
+          autoPlay
+          onClick={e => e.stopPropagation()}
+        />
+        <div style={{ position: 'absolute', bottom: '30px', color: '#9ca3af', fontSize: '14px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '8px 16px', borderRadius: '20px' }}>
+          아무 곳이나 클릭하여 닫기
+        </div>
+      </div>
+    )}
+    </>
   );
 };
 

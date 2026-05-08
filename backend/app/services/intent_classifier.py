@@ -100,7 +100,7 @@ class RuleBasedIntentClassifier:
         },
         "LOCALIZATION": {
             "keywords": [
-                ("지금", 3.5), ("현재", 3.5), ("있어?", 2.5), ("있나?", 2.5),
+                ("지금", 3.5), ("현재", 3.5),
                 ("어디", 3.0), ("위치", 3.0), ("있는지", 2.5),
                 ("실시간", 3.0), ("방금", 2.0), ("지금 당장", 3.5),
                 ("live", 3.0), ("어느 구역", 3.0), ("어느 위치", 3.0),
@@ -121,8 +121,10 @@ class RuleBasedIntentClassifier:
                 ("담 넘", 3.5), ("무단", 3.0), ("불법", 2.5),
                 ("불", 3.5), ("방화", 3.5), ("화재", 3.5), ("연기", 3.0),
                 ("싸움", 3.5), ("폭행", 3.5), ("때림", 3.0), ("멱살", 3.0),
-                ("절도", 3.5), ("훔침", 3.5), ("몰래 넣", 3.5),
+                ("절도", 3.5), ("훔침", 3.5), ("훔쳐", 3.5), ("몰래 넣", 3.5),
                 ("사건", 2.5), ("사고", 3.0), ("문제", 2.5), ("특이사항", 3.0), ("별일", 2.5),
+                ("쓰러", 3.5), ("넘어", 3.0), ("추락", 3.5), ("실신", 3.5), ("기절", 3.5),
+                ("폭발", 3.5), ("충돌", 3.0), ("쓰러진", 3.5), ("넘어진", 3.0),
             ],
             "regex": [
                 r"(수상|의심|이상한|낯선|특이).*(사람|인물|남자|여자|차|행동)",
@@ -302,6 +304,12 @@ class FineTunedIntentClassifier:
                     scores["SUMMARIZATION"] = scores.get("SUMMARIZATION", 0) + 0.5
                     best_intent = max(scores, key=scores.get)
                     confidence = scores[best_intent]
+
+            # [강제 보정] AI가 LOCALIZATION이지만 실제 LOCALIZATION 키워드가 없으면 규칙 기반 우선
+            localization_keywords = ["지금", "현재", "어디", "위치", "있는지", "실시간", "지금 당장", "live", "어느 구역", "어느 위치"]
+            if best_intent == "LOCALIZATION" and not any(kw in query for kw in localization_keywords):
+                rule_res.method = f"rule_based:ai_localization_no_keywords"
+                return rule_res
 
             # AI 신뢰도가 낮으면 규칙 기반으로 대체
             if confidence < 0.65 and rule_res.confidence >= 0.50:

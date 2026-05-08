@@ -67,7 +67,7 @@ class SearchManager:
 
         if current_intent == "LOCALIZATION":
             response_data = self._handle_localization(query, response_data)
-        elif current_intent in ("SUMMARIZATION", "BEHAVIORAL", "CAUSAL", "COUNTING"):
+        elif current_intent in ("SUMMARIZATION", "BEHAVIORAL", "CAUSAL", "COUNTING", "GENERAL"):
             response_data = self._handle_vector_search(query, top_k, time_info, current_intent, response_data)
 
         # 7. 세션 및 DB 업데이트
@@ -199,7 +199,15 @@ class SearchManager:
                 is_fallback=is_fallback, requested_time=time_info.get("raw", "전체 시간")
             )
         else:
-            response["ai_report"] = "현재 시스템에 기록된 보안 이벤트가 없습니다. 카메라 연결 상태를 확인하거나 잠시 후 다시 시도해 주세요."
+            time_hint = f" ({time_info.get('raw', '')} 기준)" if time_info.get("raw") and time_info.get("raw") != "전체" else ""
+            response["ai_report"] = (
+                f"🔍 **검색 결과 없음**\n\n"
+                f"'{query}'{time_hint}에 해당하는 보안 이벤트를 찾을 수 없습니다.\n\n"
+                f"**가능한 원인:**\n"
+                f"- 해당 유형의 이벤트가 아직 감지되지 않았습니다\n"
+                f"- 검색 시간 범위 내 관련 기록이 없습니다\n"
+                f"- 다른 키워드로 다시 검색해 보세요"
+            )
         return response
 
     def _finalize(self, session_id: str, intent: str, time_info: Dict, query: str, response: Dict):
