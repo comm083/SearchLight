@@ -146,25 +146,33 @@ def read_timestamp_from_frame(frame) -> str | None:
     if tess:
         candidates.append(tess)
 
+    def _validate_ts(ts: str) -> str | None:
+        """파싱된 타임스탬프가 유효한 날짜인지 검증."""
+        try:
+            datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+            return ts
+        except ValueError:
+            return None
+
     def _parse(text):
         corrected = _strip_non_ts(_fix_ocr_chars(text))
         print(f"  [OCR]  정제 후: '{corrected}'")
         # 패턴 1: YYYY-MM-DD HH:MM:SS (엄격)
         m = re.search(r'(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})', corrected)
         if m:
-            return f"{m.group(1)} {m.group(2)}"
-        # 패턴 2: 초 없는 경우 YYYY-MM-DD HH:MM → HH:MM:00 (패턴3보다 먼저 체크)
+            return _validate_ts(f"{m.group(1)} {m.group(2)}")
+        # 패턴 2: 초 없는 경우 YYYY-MM-DD HH:MM → HH:MM:00
         m = re.search(r'(\d{4}-\d{2}-\d{2})\s+(\d{2}[:.]\d{2})(?!\d)', corrected)
         if m:
             time_str = m.group(2).replace('.', ':')
-            return f"{m.group(1)} {time_str}:00"
+            return _validate_ts(f"{m.group(1)} {time_str}:00")
         # 패턴 3: 구분자 유연 (연도 3자리 등 비정상 OCR 대응)
         m = re.search(r'(\d{3,4})\D{0,2}(\d{1,2})\D{0,2}(\d{1,2})\D+(\d{2})[^\d](\d{2})[^\d](\d{2})', corrected)
         if m:
             y, mo, d, hh, mi, ss = m.groups()
             if len(y) == 3:
-                y = y[0] + '0' + y[1:]   # '226' → '2026'
-            return f"{y}-{mo.zfill(2)}-{d.zfill(2)} {hh.zfill(2)}:{mi.zfill(2)}:{ss.zfill(2)}"
+                y = y[0] + '0' + y[1:]
+            return _validate_ts(f"{y}-{mo.zfill(2)}-{d.zfill(2)} {hh.zfill(2)}:{mi.zfill(2)}:{ss.zfill(2)}")
         return None
 
     for raw in candidates:
@@ -184,7 +192,7 @@ MIN_FRAMES   = 5    # GPT에 전달할 최소 프레임 수
 MAX_FRAMES   = 20   # GPT에 전달할 최대 프레임 수 (페이로드 초과 방지)
 # YOLO 모델 전역 객체 저장용 딕셔너리
 _yolo_models = {}
-TARGET_CLASSES = ["person", "fire", "smoke", "open door"]
+TARGET_CLASSES = ["person", "fire", "smoke", "cigarette", "bag", "backpack", "open door"]
 
 def get_yolo_model(model_type="world"):
     global _yolo_models
@@ -202,6 +210,22 @@ def get_yolo_model(model_type="world"):
             _yolo_models["v8"] = model
             
     return _yolo_models[model_type]
+
+CLIP_BOX_CLASSES = {"person", "fire", "smoke", "open door", "door"}
+
+def _draw_filtered_boxes(frame, result, model) -> object:
+    """person, fire, smoke, door 클래스만 바운딩 박스로 그립니다."""
+    for box in result.boxes:
+        cls_name = model.names[int(box.cls)]
+        if cls_name not in CLIP_BOX_CLASSES:
+            continue
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
+        conf = float(box.conf)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(frame, f"{cls_name} {conf:.2f}", (x1, y1 - 6),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    return frame
+
 
 def _detect_target_yolo(frame, model_type="world") -> tuple:
     """지정된 YOLO 모델을 사용해 프레임 내 타겟 객체를 탐지합니다.
@@ -234,7 +258,7 @@ def encode_video_and_extract_clips(video_path: str, model_type="world"):
     total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
 
     interval_normal = max(1, int(fps * 10))  # 기본: 10초마다
-    interval_motion = max(1, int(fps * 5))   # 모션 감지 시: 5초마다
+    interval_motion = max(1, int(fps * 2))   # 모션 감지 시: 2초마다
 
     # 첫 프레임에서 타임스탬프 OCR
     start_timestamp = None
@@ -320,28 +344,51 @@ def encode_video_and_extract_clips(video_path: str, model_type="world"):
         video2 = cv2.VideoCapture(video_path)
         width  = int(video2.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(video2.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        # 브라우저 재생 가능 크기로 축소 (720p 이하)
+        out_w, out_h = (width // 2, height // 2) if height > 720 else (width, height)
 
+        import imageio_ffmpeg
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+
+        MAX_CLIP_SEC = 60
         for i, (s_frame, e_frame) in enumerate(groups):
-            s_frame = max(0, s_frame - int(fps * 2))          # 앞 2초 여유
-            e_frame = min(total_frames - 1, e_frame + int(fps * 2))  # 뒤 2초 여유
+            s_frame = max(0, s_frame - int(fps * 2))
+            e_frame = min(total_frames - 1, e_frame + int(fps * 2))
+            # 클립 최대 길이 제한 (Supabase 용량 초과 방지)
+            e_frame = min(e_frame, s_frame + int(fps * MAX_CLIP_SEC))
             s_sec   = round(s_frame / fps, 2)
             e_sec   = round(e_frame / fps, 2)
 
-            tmp_path = os.path.join(
-                tempfile.gettempdir(),
-                f"clip_{i+1}_{os.path.basename(video_path)}"
-            )
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            writer = cv2.VideoWriter(tmp_path, fourcc, fps, (width, height))
+            raw_path = os.path.join(tempfile.gettempdir(), f"raw_{i+1}_{os.path.basename(video_path)}")
+            out_path = os.path.join(tempfile.gettempdir(), f"clip_{i+1}_{os.path.basename(video_path)}")
 
+            # mp4v로 원본 저장 (바운딩 박스 오버레이 포함)
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            writer = cv2.VideoWriter(raw_path, fourcc, fps, (out_w, out_h))
+            model = get_yolo_model(model_type)
             video2.set(cv2.CAP_PROP_POS_FRAMES, s_frame)
-            for _ in range(e_frame - s_frame + 1):
+            for fi in range(e_frame - s_frame + 1):
                 ok, frm = video2.read()
                 if not ok:
                     break
+                if (out_w, out_h) != (width, height):
+                    frm = cv2.resize(frm, (out_w, out_h))
+                results = model(frm, conf=0.1, verbose=False)
+                frm = _draw_filtered_boxes(frm, results[0], model)
                 writer.write(frm)
             writer.release()
-            person_clips.append((s_sec, e_sec, tmp_path))
+
+            # ffmpeg로 H.264 변환 (브라우저 재생 가능)
+            import subprocess
+            subprocess.run([
+                ffmpeg_exe, "-y", "-i", raw_path,
+                "-vcodec", "libx264", "-crf", "28", "-preset", "fast",
+                "-movflags", "+faststart", out_path
+            ], capture_output=True)
+            if os.path.exists(raw_path):
+                os.remove(raw_path)
+
+            person_clips.append((s_sec, e_sec, out_path))
 
         video2.release()
 
@@ -352,8 +399,15 @@ def encode_video_and_extract_clips(video_path: str, model_type="world"):
 # GPT 영상 분석
 # ─────────────────────────────────────────────
 ANALYSIS_PROMPT = """
-당신은 프로 경비원입니다. 동영상의 프레임이 순서대로 주어집니다. 각 프레임 간의 차이점을 알려주고, 문제가 발생하는지 분석해야합니다.
-경비원의 입장에서 상황을 설명하고, 등장 인물 수·복장·행동, 발생 시각, 이상 상황 등을 포함하여 한국어로 상세한 요약을 작성하세요.
+당신은 프로 경비원입니다. 동영상의 프레임이 순서대로 주어집니다. 각 프레임 간의 차이점을 분석하고 상황을 판단하세요.
+
+다음 항목을 반드시 포함하여 한국어로 상세한 요약을 작성하세요:
+- 등장 인물 수 및 외형(성별 추정, 복장 색상·스타일)
+- 인물의 구체적인 행동: 걷기·뛰기·쓰러지기·앉기·서기뿐 아니라 물건을 집거나·치거나·던지거나·떨어트리는 동작, 타인의 소지품을 몰래 집거나 주머니에 넣는 행위, 담배나 전자담배를 입에 물거나 연기를 내뿜는 흡연 동작, 몸싸움·밀치기·폭행 등 세부 동작
+- 손과 입 주변의 행동(흡연 여부), 타인 물건과의 접촉(절도 여부)을 특히 주의 깊게 묘사
+- 물건이나 기물의 상태 변화(파손·전도·이동 등)
+- 이상 징후 여부 및 위험도 판단
+
 출력 예:
 {
   "summary": "..."
@@ -396,7 +450,7 @@ JSON으로만 출력하세요 (설명 없이):
         }
 
 
-SITUATION_LABELS = ("falling", "break", "assault", "smoking", "disaster")
+SITUATION_LABELS = ("falling", "break", "assault", "smoking", "disaster", "theft")
 
 def classify_situation(client: OpenAI, summary: str, detected_objects: list) -> str | None:
     """GPT로 이벤트 상황을 5가지 유형 중 하나로 분류합니다. 해당 없으면 None."""
@@ -410,11 +464,12 @@ def classify_situation(client: OpenAI, summary: str, detected_objects: list) -> 
 유형 없이 일반 상황이라면 null을 반환하세요.
 
 유형:
-- falling: 사람이 쓰러지거나 넘어지는 상황
-- break: 기물 파손, 유리 깨짐 등 파손 상황
-- assault: 폭행, 싸움, 위협 등 폭력 상황
-- smoking: 흡연 행위 감지
-- disaster: 화재, 홍수, 재해 등 재난 상황
+- falling: 사람이 쓰러지거나 넘어지거나 바닥에 주저앉거나 추락하는 상황. 갑자기 자세가 무너지거나 비틀거리다 쓰러지는 경우 포함.
+- break: 물건을 치거나 집어던지거나 떨어트려 파손되는 상황. 기물 전도, 유리·집기 파손, 의자·선반 등이 쓰러지거나 부서지는 경우 모두 포함.
+- assault: 두 사람 이상이 몸싸움·폭행·밀치기·위협하는 폭력 상황. 혼자 누군가를 쫓거나 위협적으로 접근하는 행위도 포함.
+- theft: 타인의 물건·진열대·선반의 물건을 자신의 가방·배낭·주머니 안에 넣거나 숨기는 행위가 묘사되면 반드시 theft로 분류. 타인 소지품을 몰래 가져가는 소매치기·절도 행위. 요약에 '가방에 넣다', '주머니에 넣다', '숨기다', '집어가다' 등의 표현이 있으면 반드시 theft.
+- smoking: 입에 담배나 전자담배를 물고 있거나, 손으로 무언가를 들어 입에 가져다 대며 흡입하는 행위. 입·코에서 연기나 증기가 나오는 장면. 담배를 피우거나 불을 붙이는 모습.
+- disaster: 화재, 연기 확산, 홍수, 붕괴, 폭발 등 시설·환경 재난 상황.
 
 출력 형식 (JSON만, 설명 없이):
 {{"situation": "falling"}}  또는  {{"situation": null}}"""
@@ -477,9 +532,15 @@ def analyze_frames(image_list: list, detected_objects: list) -> dict:
 
     try:
         return json.loads(raw)
-    except json.JSONDecodeError as e:
-        print(f"  [GPT 경고] JSON 파싱 실패: {e}\n  원본 응답: {raw[:200]}")
-        return {"summary": raw[:500], "frames": []}
+    except json.JSONDecodeError:
+        # JSON 문자열 값 내 리터럴 개행 문자 이스케이프 후 재시도
+        import re as _re
+        fixed = _re.sub(r'(?<!\\)\n', '\\\\n', raw)
+        try:
+            return json.loads(fixed)
+        except json.JSONDecodeError as e:
+            print(f"  [GPT 경고] JSON 파싱 실패: {e}\n  원본 응답: {raw[:200]}")
+            return {"summary": raw[:500], "frames": []}
 
 
 # ─────────────────────────────────────────────
@@ -566,6 +627,13 @@ def process_video(video_path: str, model_type="world"):
     video_file = os.path.basename(video_path)
     print(f"\n[처리] {video_file} (모델: {model_type})")
 
+    # 중복 처리 방지: event 또는 normal 테이블에 이미 존재하면 스킵
+    already_in_event  = supabase.table('event').select('id').eq('video_filename', video_file).limit(1).execute()
+    already_in_normal = supabase.table('normal').select('id').eq('video_filename', video_file).limit(1).execute()
+    if (already_in_event.data or already_in_normal.data):
+        print(f"  -> 이미 처리된 영상입니다. 스킵합니다.")
+        return
+
     # 프레임 추출 + 클립 추출 + 타임스탬프 OCR
     frames, person_clips, start_timestamp, detected_objects, max_person_count = encode_video_and_extract_clips(video_path, model_type=model_type)
     if not frames:
@@ -599,16 +667,19 @@ def process_video(video_path: str, model_type="world"):
         }).execute()
         print(f"  -> normal 저장 완료 (id: {result.data[0]['id']})")
     else:
-        # ── 이벤트 있음: event 테이블에 저장 ──
+        # ── 이벤트 있음: 클립마다 event 행 각각 생성 ──
         print("  상황 분류 중 (GPT)...")
-        situation = classify_situation(client_obj, summary, detected_objects)
-        print(f"  -> 상황: {situation or '미분류'}")
+        situation = classify_situation(client_obj, summary, detected_objects) or "normal"
+        print(f"  -> 상황: {situation}")
 
-        # 첫 번째 클립 Storage 업로드 → URL 획득
-        clip_url = None
-        if person_clips:
-            s_sec, e_sec, clip_path = person_clips[0]
-            storage_name = f"{os.path.splitext(video_file)[0]}_clip1_{int(s_sec)}s-{int(e_sec)}s.mp4"
+        print("  의도별 문장 생성 중 (GPT)...")
+        intent_sentences = generate_intent_sentences(client_obj, summary)
+
+        base_dt = datetime.strptime(start_timestamp, "%Y-%m-%d %H:%M:%S")
+
+        for i, (s_sec, e_sec, clip_path) in enumerate(person_clips, start=1):
+            storage_name = f"{os.path.splitext(video_file)[0]}_clip{i}_{int(s_sec)}s-{int(e_sec)}s.mp4"
+            clip_url = None
             try:
                 clip_url = upload_clip(supabase, clip_path, storage_name)
                 print(f"  -> 클립 업로드: {storage_name} ({s_sec}s ~ {e_sec}s)")
@@ -617,44 +688,31 @@ def process_video(video_path: str, model_type="world"):
             finally:
                 if os.path.exists(clip_path):
                     os.remove(clip_path)
-            # 나머지 클립은 업로드만 (URL 미저장)
-            for i, (s_sec, e_sec, clip_path) in enumerate(person_clips[1:], start=2):
-                storage_name = f"{os.path.splitext(video_file)[0]}_clip{i}_{int(s_sec)}s-{int(e_sec)}s.mp4"
-                try:
-                    upload_clip(supabase, clip_path, storage_name)
-                    print(f"  -> 클립 업로드: {storage_name} ({s_sec}s ~ {e_sec}s)")
-                except Exception as e:
-                    print(f"  -> 클립 업로드 실패: {e}")
-                finally:
-                    if os.path.exists(clip_path):
-                        os.remove(clip_path)
 
-        result = supabase.table('event').insert({
-            "video_filename": video_file,
-            "timestamp":      start_timestamp,
-            "summary":        summary,
-            "count_people":   max_person_count,
-            "situation":      situation,
-            "clip_url":       clip_url,
-        }).execute()
-        event_id = result.data[0]['id']
-        print(f"  -> event 저장 완료 (id: {event_id}, clip_url: {'있음' if clip_url else '없음'})")
-
-        # 의도별 문장 생성 → event_intents 저장
-        print("  의도별 문장 생성 중 (GPT)...")
-        intent_sentences = generate_intent_sentences(client_obj, summary)
-        try:
-            supabase.table('event_intents').insert({
-                "event_id":    event_id,
-                "time_sent":   intent_sentences.get("time_sent", ""),
-                "count_sent":  intent_sentences.get("count_sent", ""),
-                "action_sent": intent_sentences.get("action_sent", ""),
-                "info_sent":   intent_sentences.get("info_sent", ""),
-                "error_sent":  intent_sentences.get("error_sent", ""),
+            clip_timestamp = (base_dt + timedelta(seconds=s_sec)).strftime("%Y-%m-%d %H:%M:%S")
+            result = supabase.table('event').insert({
+                "video_filename": video_file,
+                "timestamp":      clip_timestamp,
+                "summary":        summary,
+                "count_people":   max_person_count,
+                "situation":      situation,
+                "clip_url":       clip_url,
             }).execute()
-            print("  -> event_intents 저장 완료")
-        except Exception as e:
-            print(f"  -> [event_intents 저장 실패] {e}")
+            event_id = result.data[0]['id']
+            print(f"  -> event 저장 완료 (clip {i}, id: {event_id}, clip_url: {'있음' if clip_url else '없음'})")
+
+            try:
+                supabase.table('event_intents').insert({
+                    "event_id":    event_id,
+                    "time_sent":   intent_sentences.get("time_sent", ""),
+                    "count_sent":  intent_sentences.get("count_sent", ""),
+                    "action_sent": intent_sentences.get("action_sent", ""),
+                    "info_sent":   intent_sentences.get("info_sent", ""),
+                    "error_sent":  intent_sentences.get("error_sent", ""),
+                }).execute()
+                print(f"  -> event_intents 저장 완료 (clip {i})")
+            except Exception as e:
+                print(f"  -> [event_intents 저장 실패] {e}")
 
 
 # ─────────────────────────────────────────────
@@ -666,7 +724,7 @@ def main():
     parser.add_argument('--schema', action='store_true', help='테이블 생성 SQL 출력 후 종료')
     parser.add_argument('--video',  type=str, help='처리할 단일 영상 파일 경로')
     parser.add_argument('--dir',    type=str, help='처리할 영상 디렉토리 경로')
-    parser.add_argument('--model',  type=str, choices=['v8', 'world'], default='world', help='사용할 YOLO 모델 종류 (v8 또는 world)')
+    parser.add_argument('--model',  type=str, choices=['v8', 'world'], default='v8', help='사용할 YOLO 모델 종류 (v8 또는 world)')
     args = parser.parse_args()
 
     if args.schema:
