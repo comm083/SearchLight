@@ -149,7 +149,7 @@ class SupabaseService:
         """
         try:
             response = self.supabase.table('event') \
-                .select('id, summary, timestamp, video_filename, situation, clip_url, event_clips(id, clip_url, start_sec, end_sec, clip_index)') \
+                .select('id, summary, short_summary, timestamp, video_filename, situation, clip_url, event_clips(id, clip_url, start_sec, end_sec, clip_index)') \
                 .order('timestamp', desc=True) \
                 .limit(limit) \
                 .execute()
@@ -181,6 +181,7 @@ class SupabaseService:
                     events.append({
                         "id": item.get('id'),
                         "title": item.get('summary', '보안 이벤트 기록'),
+                        "short_summary": item.get('short_summary') or '',
                         "location": item.get('video_filename', '미상'),
                         "timestamp": item.get('timestamp', ''),
                         "clip_url": first_clip_url,
@@ -244,6 +245,35 @@ class SupabaseService:
         except Exception as e:
             print(f"[Supabase Error] timestamp 업데이트 실패: {e}")
             return False
+
+    def fix_timestamps_kst(self) -> dict:
+        """
+        기존에 KST 시각을 timezone 없이 저장해 UTC로 오인된 타임스탬프를 -9시간 보정합니다.
+        최초 1회만 실행해야 합니다.
+        """
+        try:
+            self.supabase.rpc('fix_event_timestamps_kst', {}).execute()
+            return {"status": "success", "message": "타임스탬프 KST 보정 완료"}
+        except Exception:
+            # RPC가 없으면 직접 Python으로 보정
+            try:
+                rows = self.supabase.table('event').select('id, timestamp').not_.is_('timestamp', 'null').execute()
+                fixed = 0
+                from datetime import datetime, timedelta, timezone
+                for row in rows.data:
+                    ts = row['timestamp']
+                    try:
+                        dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                        dt_utc = dt.astimezone(timezone.utc)
+                        corrected = dt_utc - timedelta(hours=9)
+                        corrected_str = corrected.strftime("%Y-%m-%d %H:%M:%S+00:00")
+                        self.supabase.table('event').update({"timestamp": corrected_str}).eq('id', row['id']).execute()
+                        fixed += 1
+                    except Exception:
+                        pass
+                return {"status": "success", "fixed": fixed, "message": f"{fixed}건 타임스탬프 보정 완료"}
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
 
     def delete_event(self, event_id: str) -> bool:
         try:

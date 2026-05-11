@@ -60,11 +60,11 @@ class NLPService:
 
         print("[Service] OpenAI NLP 서비스 초기화 완료!")
 
-    def generate_security_report(self, query: str, contexts: list, intent: str = "SUMMARIZATION", is_fallback: bool = False, requested_time: str = "알 수 없는 시간", mode: str = "summary"):
+    def generate_security_report(self, query: str, contexts: list, intent: str = "SUMMARIZATION", is_fallback: bool = False, requested_time: str = "알 수 없는 시간", mode: str = "summary", start_time: str = None, end_time: str = None):
         """검색된 장면들을 바탕으로 자연어 보안 보고서를 생성합니다."""
         if not self.client:
             return "AI 보고서 기능이 비활성화 상태입니다. (OpenAI API 키 필요)"
-        
+
         if not contexts:
             return f"죄송합니다. 요청하신 {requested_time} 근처에는 기록된 보안 이벤트가 없습니다."
 
@@ -73,11 +73,17 @@ class NLPService:
         system_prompt = self._get_system_prompt(mode)
         specific_instruction = self._get_intent_instruction(intent)
 
+        date_range = ""
+        if start_time and end_time:
+            date_range = f" (실제 조회 기간: {start_time[:10]} ~ {end_time[:10]})"
+        elif start_time:
+            date_range = f" (실제 조회 기간: {start_time[:10]} 이후)"
+
         user_prompt = f"""
 {fallback_notice}
 의도: {intent} ({specific_instruction})
 사용자 질문: {query}
-요청 시각: {requested_time}
+요청 시각: {requested_time}{date_range}
 실제 데이터: {context_text}
 
 [작성 지침]:
@@ -101,30 +107,38 @@ class NLPService:
             return "보안 보고서를 생성하는 동안 기술적인 문제가 발생했습니다. 잠시 후 다시 시도해 주세요."
 
     def _build_context_text(self, contexts: list) -> str:
+        from datetime import timezone as _tz
         import re
         items = []
         for c in contexts:
             desc = c.get('description', '설명 없음')
             ts_raw = c.get('timestamp') or c.get('event_date') or ''
-            
-            # 날짜와 시간 레이블 구성
+
             date_label = ''
             time_label = ''
-            
+
             if ts_raw:
-                ts_str = str(ts_raw)
-                # 날짜 추출 (YYYY-MM-DD)
-                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', ts_str)
-                if date_match:
-                    date_label = f"[{date_match.group(1)}]"
-                
-                # 시간 추출 및 오전/오후 변환
-                time_match = re.search(r'(\d{1,2}):(\d{2}):(\d{2})', ts_str)
-                if time_match:
-                    h, mi, s = int(time_match.group(1)), time_match.group(2), time_match.group(3)
+                # Supabase는 naive UTC를 KST(+9h)로 반환하므로 UTC 기준으로 되돌림
+                try:
+                    from datetime import datetime as _dt
+                    dt = _dt.fromisoformat(str(ts_raw).replace('Z', '+00:00'))
+                    dt_utc = dt.astimezone(_tz.utc)
+                    date_label = f"[{dt_utc.strftime('%Y-%m-%d')}]"
+                    h = dt_utc.hour
                     ampm = '오전' if h < 12 else '오후'
-                    h12 = h if h <= 12 else h - 12
-                    time_label = f"[{ampm} {h12}:{mi}:{s}]"
+                    h12 = 12 if h == 0 else (h if h <= 12 else h - 12)
+                    time_label = f"[{ampm} {h12}:{dt_utc.strftime('%M:%S')}]"
+                except Exception:
+                    ts_str = str(ts_raw)
+                    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', ts_str)
+                    if date_match:
+                        date_label = f"[{date_match.group(1)}]"
+                    time_match = re.search(r'(\d{1,2}):(\d{2}):(\d{2})', ts_str)
+                    if time_match:
+                        h, mi, s = int(time_match.group(1)), time_match.group(2), time_match.group(3)
+                        ampm = '오전' if h < 12 else '오후'
+                        h12 = h if h <= 12 else h - 12
+                        time_label = f"[{ampm} {h12}:{mi}:{s}]"
             
             ts_display = f"{date_label} {time_label}".strip()
             dets = c.get('detections', [])
