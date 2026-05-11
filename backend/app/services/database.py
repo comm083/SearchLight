@@ -10,7 +10,6 @@ from app.core.config import settings
 class SupabaseService:
     def __init__(self):
         url = settings.SUPABASE_URL
-        # service_role 키 우선 사용 (RLS 우회) → 없으면 anon 키 폴백
         key = settings.SUPABASE_SERVICE_KEY or settings.SUPABASE_KEY
         if not url or not key:
             print("[Warning] Supabase 설정이 없습니다. 로그 저장 기능이 비활성화됩니다.")
@@ -119,21 +118,24 @@ class SupabaseService:
 
     def get_latest_status(self, location: str = None):
         """
-        가장 최신 event 테이블 레코드를 반환합니다. (Localization 용)
+        특정 구역 또는 전체 구역의 가장 최신 보안 이벤트를 가져옵니다. (Localization 용)
         """
         try:
-            response = self.supabase.table('event') \
-                .select('id, summary, timestamp, video_filename, situation, clip_url') \
-                .order('timestamp', desc=True) \
-                .limit(1) \
-                .execute()
+            query = self.supabase.table('cctv_vectors').select('content, metadata').order('metadata->timestamp', desc=True).limit(1)
+            
+            if location:
+                # location 필터링 (metadata 내의 location 필드 기준)
+                # Supabase에서는 json 필터링이 가능함
+                query = query.filter('metadata->>location', 'eq', location)
+            
+            response = query.execute()
             if response.data:
                 item = response.data[0]
                 return {
-                    "description": item.get('summary', ''),
-                    "timestamp":   item.get('timestamp'),
-                    "location":    item.get('video_filename', '미상'),
-                    "clip_url":    item.get('clip_url'),
+                    "description": item['content'],
+                    "timestamp": item['metadata'].get('timestamp'),
+                    "location": item['metadata'].get('location'),
+                    "image_path": item['metadata'].get('image_path')
                 }
             return None
         except Exception as e:
@@ -146,22 +148,24 @@ class SupabaseService:
         """
         try:
             response = self.supabase.table('event') \
-                .select('id, summary, timestamp, video_filename, situation, count_people, clip_url') \
+                .select('id, summary, timestamp, video_filename, situation, clip_url') \
                 .order('timestamp', desc=True) \
                 .limit(limit) \
                 .execute()
 
             events = []
-            for item in (response.data or []):
-                events.append({
-                    "id":        item.get('id', ''),
-                    "title":     item.get('summary', '보안 이벤트 기록'),
-                    "location":  item.get('video_filename', '미상'),
-                    "timestamp": item.get('timestamp', ''),
-                    "clip_url":  item.get('clip_url', ''),
-                    "tag":       item.get('situation') or 'normal',
-                    "confidence": 90,
-                })
+            if response.data:
+                for item in response.data:
+                    events.append({
+                        "id": item.get('id'),
+                        "title": item.get('summary', '보안 이벤트 기록'),
+                        "location": item.get('video_filename', '미상'),
+                        "timestamp": item.get('timestamp', ''),
+                        "clip_url": item.get('clip_url'),
+                        "tag": item.get('situation', 'normal'),
+                        "image_path": None,
+                        "confidence": None,
+                    })
             return events
         except Exception as e:
             print(f"[Supabase Error] 이벤트 목록 조회 실패: {e}")
