@@ -171,6 +171,14 @@ class SupabaseService:
             print(f"[Supabase Error] 이벤트 목록 조회 실패: {e}")
             return []
 
+    def delete_event(self, event_id: str) -> bool:
+        try:
+            self.supabase.table('event').delete().eq('id', event_id).execute()
+            return True
+        except Exception as e:
+            print(f"[Supabase Error] 이벤트 삭제 실패: {e}")
+            return False
+
     def get_nearest_event(self, timestamp_str: str) -> dict | None:
         """
         주어진 시각과 가장 가까운 event 테이블 레코드를 반환합니다.

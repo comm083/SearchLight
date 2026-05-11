@@ -19,6 +19,7 @@ SUPABASE_URL   = os.getenv("SUPABASE_URL")
 # service_role 키 우선 사용 (RLS 우회) → 없으면 anon 키로 폴백
 SUPABASE_KEY   = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
 STORAGE_BUCKET = "cctv-clips"
+CROP_BUCKET    = "cctv-crops"
 
 # 랜덤 타임스탬프 생성 시 날짜 중복 방지용 추적 집합
 _used_random_dates: set = set()
@@ -229,7 +230,7 @@ def _draw_filtered_boxes(frame, result, model) -> object:
 
 def _detect_target_yolo(frame, model_type="world") -> tuple:
     """지정된 YOLO 모델을 사용해 프레임 내 타겟 객체를 탐지합니다.
-    Returns: (detected_classes: list, person_count: int)
+    Returns: (detected_classes: list, person_count: int, raw_results: list)
     """
     model = get_yolo_model(model_type)
     results = model(frame, conf=0.1, verbose=False)
@@ -241,7 +242,7 @@ def _detect_target_yolo(frame, model_type="world") -> tuple:
             detected_classes.add(class_name)
             if class_name in ("person", "people", "human"):
                 person_count += 1
-    return list(detected_classes), person_count
+    return list(detected_classes), person_count, results
 
 
 def encode_video_and_extract_clips(video_path: str, model_type="world"):
@@ -271,6 +272,9 @@ def encode_video_and_extract_clips(video_path: str, model_type="world"):
     motion_frame_indices = []
     all_detected_objects = set()
     max_person_count = 0
+    crop_candidates = []       # 크롭 후보: {time_sec, class_name, bbox, img}
+    _crop_class_counts = {}    # 클래스별 수집 개수 제한 (클래스당 최대 3개)
+    MAX_CROPS_PER_CLASS = 3
     cur = 0
 
     while video.isOpened():
@@ -280,12 +284,33 @@ def encode_video_and_extract_clips(video_path: str, model_type="world"):
 
         if cur % interval_motion == 0:
             # YOLO를 이용해 특정 객체 감지
-            detected_objs, p_count = _detect_target_yolo(frame, model_type=model_type)
+            detected_objs, p_count, yolo_results = _detect_target_yolo(frame, model_type=model_type)
             has_target = len(detected_objs) > 0
 
             if has_target:
                 all_detected_objects.update(detected_objs)
                 motion_frame_indices.append(cur)
+
+                # 크롭 추출: CLIP_BOX_CLASSES 객체만, 클래스당 MAX_CROPS_PER_CLASS 개 제한
+                model = get_yolo_model(model_type)
+                for r in yolo_results:
+                    for box in r.boxes:
+                        cls_name = model.names[int(box.cls)]
+                        if cls_name not in CLIP_BOX_CLASSES:
+                            continue
+                        if _crop_class_counts.get(cls_name, 0) >= MAX_CROPS_PER_CLASS:
+                            continue
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        if (x2 - x1) < 30 or (y2 - y1) < 30:
+                            continue
+                        crop_img = frame[y1:y2, x1:x2].copy()
+                        crop_candidates.append({
+                            'time_sec':   round(cur / fps, 2),
+                            'class_name': cls_name,
+                            'bbox':       {'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2},
+                            'img':        crop_img,
+                        })
+                        _crop_class_counts[cls_name] = _crop_class_counts.get(cls_name, 0) + 1
                 if p_count > max_person_count:
                     max_person_count = p_count
 
@@ -392,7 +417,7 @@ def encode_video_and_extract_clips(video_path: str, model_type="world"):
 
         video2.release()
 
-    return base64frames, person_clips, start_timestamp, list(all_detected_objects), max_person_count
+    return base64frames, person_clips, start_timestamp, list(all_detected_objects), max_person_count, crop_candidates
 
 
 # ─────────────────────────────────────────────
@@ -558,6 +583,65 @@ def upload_clip(supabase: Client, clip_path: str, storage_name: str) -> str:
     return supabase.storage.from_(STORAGE_BUCKET).get_public_url(storage_name)
 
 
+def upload_crop_image(supabase: Client, img_bytes: bytes, storage_name: str) -> str:
+    """크롭 이미지를 Supabase Storage(cctv-crops 버킷)에 업로드하고 공개 URL을 반환합니다."""
+    supabase.storage.from_(CROP_BUCKET).upload(
+        path=storage_name,
+        file=img_bytes,
+        file_options={"content-type": "image/jpeg", "upsert": "true"}
+    )
+    return supabase.storage.from_(CROP_BUCKET).get_public_url(storage_name)
+
+
+def save_crops_to_db(supabase: Client, event_id: str, video_file: str,
+                     start_timestamp: str, crop_candidates: list) -> None:
+    """크롭 이미지를 CLIP 임베딩 후 Supabase cropped_objects 테이블에 저장합니다."""
+    if not crop_candidates:
+        return
+    try:
+        from sentence_transformers import SentenceTransformer
+        from PIL import Image
+        import cv2 as _cv2
+        import io
+
+        clip_model = SentenceTransformer('clip-ViT-B-32')
+        saved = 0
+        for crop in crop_candidates:
+            try:
+                # numpy BGR → PIL RGB
+                pil_img = Image.fromarray(_cv2.cvtColor(crop['img'], _cv2.COLOR_BGR2RGB))
+
+                # CLIP 임베딩 생성
+                vec = clip_model.encode([pil_img], convert_to_numpy=True)[0].tolist()
+
+                # JPEG 인코딩 → Supabase Storage 업로드
+                buf = io.BytesIO()
+                pil_img.save(buf, format='JPEG', quality=85)
+                img_bytes = buf.getvalue()
+                storage_name = (
+                    f"{os.path.splitext(video_file)[0]}"
+                    f"_{crop['class_name']}_{int(crop['time_sec'])}s.jpg"
+                )
+                image_url = upload_crop_image(supabase, img_bytes, storage_name)
+
+                # DB 저장
+                supabase.table('cropped_objects').insert({
+                    'event_id':       event_id,
+                    'video_filename': video_file,
+                    'timestamp':      start_timestamp,
+                    'object_class':   crop['class_name'],
+                    'bbox':           crop['bbox'],
+                    'clip_vector':    vec,
+                    'image_url':      image_url,
+                }).execute()
+                saved += 1
+            except Exception as e:
+                print(f"  [Crop] {crop['class_name']} 저장 실패: {e}")
+        print(f"  -> 크롭 객체 {saved}/{len(crop_candidates)}개 저장 완료")
+    except Exception as e:
+        print(f"  [Crop] 저장 중 오류: {e}")
+
+
 # ─────────────────────────────────────────────
 # Supabase 테이블/버킷 생성 SQL 출력
 # ─────────────────────────────────────────────
@@ -611,9 +695,57 @@ CREATE INDEX IF NOT EXISTS idx_event_timestamp       ON event(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_event_situation       ON event(situation);
 CREATE INDEX IF NOT EXISTS idx_event_intents_event_id ON event_intents(event_id);
 
--- 5. Storage 버킷 생성 (이미 있으면 건너뜀)
+-- 5. 크롭 객체 이미지 테이블 (CLIP 벡터 검색용)
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE IF NOT EXISTS cropped_objects (
+    id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    event_id        UUID        REFERENCES event(id) ON DELETE CASCADE,
+    video_filename  TEXT        NOT NULL,
+    timestamp       TIMESTAMPTZ,
+    object_class    TEXT,
+    bbox            JSONB,
+    image_url       TEXT,
+    clip_vector     vector(512),
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_cropped_objects_event_id ON cropped_objects(event_id);
+CREATE INDEX IF NOT EXISTS idx_cropped_objects_class    ON cropped_objects(object_class);
+
+-- CLIP 유사도 검색 RPC 함수
+CREATE OR REPLACE FUNCTION match_cropped_objects(
+    query_embedding vector(512),
+    match_threshold  float,
+    match_count      int
+)
+RETURNS TABLE (
+    id            uuid,
+    event_id      uuid,
+    video_filename text,
+    timestamp     timestamptz,
+    object_class  text,
+    bbox          jsonb,
+    image_url     text,
+    similarity    float
+)
+LANGUAGE sql STABLE AS $$
+    SELECT id, event_id, video_filename, timestamp, object_class, bbox, image_url,
+           1 - (clip_vector <=> query_embedding) AS similarity
+    FROM   cropped_objects
+    WHERE  clip_vector IS NOT NULL
+      AND  1 - (clip_vector <=> query_embedding) > match_threshold
+    ORDER  BY clip_vector <=> query_embedding
+    LIMIT  match_count;
+$$;
+
+-- 6. Storage 버킷 생성 (이미 있으면 건너뜀)
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('cctv-clips', 'cctv-clips', true)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('cctv-crops', 'cctv-crops', true)
 ON CONFLICT (id) DO NOTHING;
 -- ================================================================
 """)
@@ -634,8 +766,8 @@ def process_video(video_path: str, model_type="world"):
         print(f"  -> 이미 처리된 영상입니다. 스킵합니다.")
         return
 
-    # 프레임 추출 + 클립 추출 + 타임스탬프 OCR
-    frames, person_clips, start_timestamp, detected_objects, max_person_count = encode_video_and_extract_clips(video_path, model_type=model_type)
+    # 프레임 추출 + 클립 추출 + 타임스탬프 OCR + 크롭 후보
+    frames, person_clips, start_timestamp, detected_objects, max_person_count, crop_candidates = encode_video_and_extract_clips(video_path, model_type=model_type)
     if not frames:
         print("  -> 프레임을 추출할 수 없습니다.")
         return
@@ -713,6 +845,11 @@ def process_video(video_path: str, model_type="world"):
                 print(f"  -> event_intents 저장 완료 (clip {i})")
             except Exception as e:
                 print(f"  -> [event_intents 저장 실패] {e}")
+
+            # 크롭 객체 CLIP 임베딩 저장 (첫 번째 클립 이벤트 기준으로만 저장)
+            if i == 1 and crop_candidates:
+                print(f"  크롭 객체 CLIP 임베딩 저장 중... ({len(crop_candidates)}개)")
+                save_crops_to_db(supabase, event_id, video_file, start_timestamp, crop_candidates)
 
 
 # ─────────────────────────────────────────────

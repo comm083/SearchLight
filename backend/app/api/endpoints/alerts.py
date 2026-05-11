@@ -22,3 +22,12 @@ async def get_all_events(limit: int = 300):
     """모든 비디오 이벤트 조회 (Event History 용)"""
     from app.services.database import db_service
     return db_service.get_all_events(limit)
+
+@router.delete("/events/{event_id}")
+async def delete_event(event_id: str):
+    """이벤트 삭제 (관리자 전용)"""
+    from app.services.database import db_service
+    ok = db_service.delete_event(event_id)
+    if ok:
+        return {"status": "success", "message": f"이벤트 {event_id} 삭제 완료"}
+    return {"status": "error", "message": "삭제 실패"}

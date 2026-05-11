@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Plus, Search, Shield, Clock, Settings, User, MoreVertical, LogIn, LogOut, Mic, Square, X, Archive, Volume2, VolumeX
+import {
+  Plus, Search, Shield, Clock, Settings, User, MoreVertical, LogIn, LogOut, Mic, Square, X, Archive, Volume2, VolumeX, BarChart2
 } from 'lucide-react';
 
 // Hooks
@@ -12,6 +12,7 @@ import { useVoice } from './hooks/useVoice';
 import MessageItem from './components/chat/MessageItem';
 import ResultCard from './components/chat/ResultCard';
 import EventHistory from './components/EventHistory';
+import Dashboard from './components/Dashboard';
 import LoginModal from './components/LoginModal';
 
 const App = () => {
@@ -88,7 +89,8 @@ const App = () => {
     <div className="app-container">
       {/* Sidebar - Simplified for refactoring */}
       <aside className="sidebar" style={{ width: `${sidebarWidth}px`, flexShrink: 0 }}>
-        <button className={`new-chat-btn ${currentView === 'archive' ? 'active' : ''}`} style={{ marginBottom: '10px', backgroundColor: currentView === 'archive' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }} onClick={() => setCurrentView('archive')}><Archive size={18} /><span>영상 보관함</span></button>
+        <button className={`new-chat-btn ${currentView === 'archive' ? 'active' : ''}`} style={{ marginBottom: '8px', backgroundColor: currentView === 'archive' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }} onClick={() => setCurrentView('archive')}><Archive size={18} /><span>영상 보관함</span></button>
+        <button className={`new-chat-btn ${currentView === 'dashboard' ? 'active' : ''}`} style={{ marginBottom: '10px', backgroundColor: currentView === 'dashboard' ? 'rgba(249, 115, 22, 0.2)' : 'rgba(249, 115, 22, 0.08)', color: '#fb923c', border: '1px solid rgba(249, 115, 22, 0.2)' }} onClick={() => setCurrentView('dashboard')}><BarChart2 size={18} /><span>통계 대시보드</span></button>
         <button className="new-chat-btn" onClick={() => { startNewChat(); setCurrentView('chat'); }}><Plus size={18} /><span>새 채팅</span></button>
         <div className="search-box">
           <Search className="search-icon" size={14} />
@@ -197,7 +199,9 @@ const App = () => {
         </header>
 
         {currentView === 'archive' ? (
-          <EventHistory />
+          <EventHistory user={user} />
+        ) : currentView === 'dashboard' ? (
+          <Dashboard />
         ) : (
           <>
             <div className="chat-container">

@@ -74,10 +74,13 @@ class RuleBasedIntentClassifier:
                 ("카운트", 2.0), ("합계", 2.0), ("총", 1.0), ("집계", 2.5),
                 ("몇 회", 2.5), ("몇 개", 2.0), ("통계", 2.0), ("인원수", 3.0),
                 ("차량수", 3.0), ("얼마나 많이", 2.5),
+                ("방문자 수", 3.0), ("방문자수", 3.0), ("방문 수", 2.5),
+                ("감지 수", 2.5), ("감지수", 2.5), ("발생 수", 2.5),
             ],
             "regex": [
                 r"몇\s*(명|대|번|회|개|차례|인|분)",
                 r"(총|전체)\s*.*(수|대수|횟수|건수)",
+                r"(방문자|감지|발생|침입)\s*수\s*(알|집|통|세|어)",
             ],
             "db_route": "sqlite_count",
         },
@@ -310,6 +313,47 @@ class FineTunedIntentClassifier:
             if best_intent == "LOCALIZATION" and not any(kw in query for kw in localization_keywords):
                 rule_res.method = f"rule_based:ai_localization_no_keywords"
                 return rule_res
+
+            # [강제 보정] 명시적 계측 패턴 존재 → COUNTING 강제
+            # 평가 결과: "몇 명이나 됐어?" 등이 AI에 의해 SUMMARIZATION으로 오분류됨
+            _counting_force = [
+                r"몇\s*(명|대|번|회|개|차례|인|분)",
+                r"(총|전체)\s*.*(수|대수|횟수|건수)",
+                r"(횟수|집계|인원수|차량수|방문자\s*수)",
+            ]
+            if any(re.search(p, query) for p in _counting_force):
+                best_intent = "COUNTING"
+                confidence = max(confidence, 0.85)
+
+            # [강제 보정] 요약·정리 동사 + 이상행동 키워드 없음 → BEHAVIORAL 오분류 교정
+            # 평가 결과: "오전 상황 요약해줘" 등이 AI에 의해 BEHAVIORAL로 오분류됨
+            _summary_verbs    = ["요약해", "정리해", "보고해", "히스토리", "기록",
+                                  "이벤트 정리", "이벤트 요약", "알려줘", "있었는지"]
+            _behavioral_clear = ["수상", "폭행", "침입", "화재", "쓰러", "절도", "배회", "이상한", "낯선", "위협"]
+            if (best_intent == "BEHAVIORAL"
+                    and any(v in query for v in _summary_verbs)
+                    and not any(b in query for b in _behavioral_clear)):
+                best_intent = "SUMMARIZATION"
+                confidence = max(confidence, 0.82)
+
+            # [강제 보정] 경위·원인 키워드 존재 → CAUSAL 강제
+            # 평가 결과: "사고 경위를 설명해줘"에서 "사고"가 BEHAVIORAL 유발
+            _causal_force = ["경위", "원인", "이유", "어째서", "왜", "어쩌다", "어떻게 된", "설명해"]
+            if (best_intent != "CAUSAL"
+                    and any(k in query for k in _causal_force)
+                    and not any(b in query for b in _behavioral_clear)):
+                best_intent = "CAUSAL"
+                confidence = max(confidence, 0.80)
+
+            # [강제 보정] 실시간 지시어 + 장소 명사 → LOCALIZATION 강제
+            # 평가 결과: "현재 주차장 상황은?" 등이 BEHAVIORAL로 오분류됨
+            _now_words     = ["현재", "지금", "실시간"]
+            _place_nouns   = ["정문", "주차장", "로비", "창고", "사무실", "식당", "옥상", "엘리베이터", "A구역", "B구역"]
+            if (best_intent not in ("LOCALIZATION",)
+                    and any(w in query for w in _now_words)
+                    and any(p in query for p in _place_nouns)):
+                best_intent = "LOCALIZATION"
+                confidence = max(confidence, 0.90)
 
             # AI 신뢰도가 낮으면 규칙 기반으로 대체
             if confidence < 0.65 and rule_res.confidence >= 0.50:
