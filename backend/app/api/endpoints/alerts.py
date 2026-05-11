@@ -42,6 +42,16 @@ async def update_event_timestamp(event_id: str, body: TimestampUpdate):
         return {"status": "success", "message": f"이벤트 {event_id} timestamp 업데이트 완료"}
     return {"status": "error", "message": "업데이트 실패"}
 
+@router.post("/admin/fix-timestamps")
+async def fix_timestamps():
+    """기존 이벤트 타임스탬프 KST 보정 (최초 1회만 실행)"""
+    from app.services.database import db_service
+    from app.services.vector_db_service import vector_db_service
+    result = db_service.fix_timestamps_kst()
+    if result.get("status") == "success":
+        vector_db_service.reload()
+    return result
+
 @router.delete("/events/{event_id}")
 async def delete_event(event_id: str):
     """이벤트 삭제 (관리자 전용)"""

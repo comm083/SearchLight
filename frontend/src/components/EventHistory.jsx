@@ -1,23 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Download, Play, MapPin, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Lock } from 'lucide-react';
 
-const formatCctvTime = (ts) => {
-  if (!ts) return '';
-  const clean = ts.replace('T', ' ').replace(/\.\d+/, '').replace(/([+-]\d{2}:\d{2}|Z)$/, '');
-  const [date, time] = clean.split(' ');
-  if (!date) return ts;
-  const [y, m, d] = date.split('-');
-  if (!time) return `${y}. ${parseInt(m)}. ${parseInt(d)}.`;
-  const [hh, mi, ss] = time.split(':');
-  const hour = parseInt(hh);
-  const ampm = hour < 12 ? '오전' : '오후';
-  const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-  return `${y}. ${parseInt(m)}. ${parseInt(d)}. ${ampm} ${h12}:${mi}:${ss || '00'}`;
+// event.timestamp = video_start + clips[0].start_sec
+// 각 클립의 실제 시각 = event.timestamp + (clip.start_sec - clips[0].start_sec)
+const formatClipTime = (eventTs, firstStartSec, curStartSec) => {
+  if (!eventTs) return '';
+  const d = new Date(eventTs);
+  if (isNaN(d.getTime())) return eventTs;
+  if (firstStartSec != null && curStartSec != null && !isNaN(Number(firstStartSec)) && !isNaN(Number(curStartSec))) {
+    d.setTime(d.getTime() + (Number(curStartSec) - Number(firstStartSec)) * 1000);
+  }
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + 1;
+  const day = d.getUTCDate();
+  const h = d.getUTCHours();
+  const mi = String(d.getUTCMinutes()).padStart(2, '0');
+  const s = String(d.getUTCSeconds()).padStart(2, '0');
+  const ampm = h < 12 ? '오전' : '오후';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${y}. ${m}. ${day}. ${ampm} ${h12}:${mi}:${s}`;
 };
 
 const getRawDate = (ts) => {
   if (!ts) return '';
-  return ts.replace('T', ' ').replace(/\.\d+/, '').replace(/([+-]\d{2}:\d{2}|Z)$/, '').split(' ')[0];
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return '';
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 };
 
 // YYYY-MM-DD 문자열 → Date (로컬 기준, timezone 변환 없음)
@@ -56,7 +67,7 @@ const EventHistory = ({ user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState('daily');
   const [anchorDate, setAnchorDate] = useState(() => toDateStr(new Date()));
-  const [modalUrl, setModalUrl] = useState(null);
+  const [modalData, setModalData] = useState(null);
   // 이벤트별 현재 선택된 클립 인덱스 (eventId → clipArrayIndex)
   const [clipIndices, setClipIndices] = useState({});
 
@@ -307,7 +318,7 @@ const EventHistory = ({ user }) => {
                   {/* 썸네일 영역 */}
                   <div
                     style={{ width: '280px', height: '200px', position: 'relative', flexShrink: 0, cursor: hasClip ? 'pointer' : 'default', backgroundColor: '#0b0f19' }}
-                    onClick={() => hasClip && setModalUrl(curClip.clip_url)}
+                    onClick={() => hasClip && setModalData({ url: curClip.clip_url, event, clips, curClip })}
                   >
                     {hasClip ? (
                       <video key={curClip.clip_url} src={curClip.clip_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted preload="metadata" />
@@ -336,20 +347,22 @@ const EventHistory = ({ user }) => {
 
                   {/* 정보 영역 */}
                   <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#fff', margin: '0 0 12px 0', lineHeight: '1.4' }}>{event.title}</h3>
+                    <p style={{ fontSize: '14px', color: '#cbd5e1', margin: '0 0 12px 0', lineHeight: '1.6', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                      {event.short_summary || event.title}
+                    </p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>
                       <MapPin size={14} /> {event.location}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '14px', marginBottom: 'auto' }}>
-                      <Clock size={14} /> {formatCctvTime(event.timestamp)}
+                      <Clock size={14} /> {formatClipTime(event.timestamp, clips[0]?.start_sec, curClip?.start_sec)}
                     </div>
                     <div style={{ display: 'flex', gap: '8px', marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '20px', alignItems: 'center' }}>
                       <button
                         style={{ backgroundColor: hasClip ? '#60a5fa' : '#334155', color: hasClip ? '#0f172a' : '#6b7280', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: hasClip ? 'pointer' : 'not-allowed', fontSize: '13px' }}
-                        onClick={() => hasClip && setModalUrl(curClip.clip_url)}
+                        onClick={() => hasClip && setModalData({ url: curClip.clip_url, event, clips, curClip })}
                         disabled={!hasClip}
                       >
-                        <Play size={14} /> 영상 보기
+                        <Play size={14} /> 자세히 보기
                       </button>
                       {/* 클립 네비게이션 */}
                       {totalClips > 1 && (
@@ -397,19 +410,40 @@ const EventHistory = ({ user }) => {
       </div>
 
       {/* 영상 모달 */}
-      {modalUrl && (
+      {modalData && (
         <div
-          style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.92)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}
-          onClick={() => setModalUrl(null)}
+          style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.92)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', boxSizing: 'border-box' }}
+          onClick={() => setModalData(null)}
         >
-          <video
-            src={modalUrl}
-            style={{ maxWidth: '90%', maxHeight: '85%', borderRadius: '10px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)' }}
-            controls autoPlay
+          <div
+            style={{ display: 'flex', flexDirection: 'column', maxWidth: '860px', width: '100%', maxHeight: '90vh', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.7)' }}
             onClick={e => e.stopPropagation()}
-          />
-          <div style={{ position: 'absolute', bottom: '30px', color: '#9ca3af', fontSize: '14px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '8px 16px', borderRadius: '20px' }}>
-            아무 곳이나 클릭하여 닫기
+          >
+            {/* 영상 */}
+            <video
+              src={modalData.url}
+              style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', backgroundColor: '#000' }}
+              controls autoPlay
+            />
+            {/* 하단 설명 */}
+            <div style={{ backgroundColor: '#0f172a', padding: '20px 24px', borderTop: '1px solid #1e293b', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                {modalData.event.tag && modalData.event.tag !== 'normal' && (
+                  <span style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.25)', padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '700' }}>
+                    {modalData.event.tag}
+                  </span>
+                )}
+                <span style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <MapPin size={12} /> {modalData.event.location}
+                </span>
+                <span style={{ fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Clock size={12} /> {formatClipTime(modalData.event.timestamp, modalData.clips?.[0]?.start_sec, modalData.curClip?.start_sec)}
+                </span>
+              </div>
+              <p style={{ fontSize: '14px', color: '#cbd5e1', lineHeight: '1.8', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'keep-all' }}>
+                {modalData.event.title}
+              </p>
+            </div>
           </div>
         </div>
       )}

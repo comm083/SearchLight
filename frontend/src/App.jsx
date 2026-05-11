@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Plus, Search, Shield, Clock, Settings, User, MoreVertical, LogIn, LogOut, Mic, Square, X, Archive, Volume2, VolumeX, BarChart2
+  Plus, Search, Shield, Clock, Settings, User, MoreVertical, LogIn, LogOut, Mic, Square, X, Archive, BarChart2
 } from 'lucide-react';
 
 // Hooks
@@ -28,7 +28,7 @@ const App = () => {
   const [expandedResults, setExpandedResults] = useState({});
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [currentView, setCurrentView] = useState('chat');
-  const [isTtsEnabled, setIsTtsEnabled] = useState(true);
+  const [isTtsEnabled, setIsTtsEnabled] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
 
   const chatEndRef = useRef(null);
@@ -165,9 +165,20 @@ const App = () => {
               </div>
            </div>
            
+           <button
+               className="icon-btn"
+               title={isTtsEnabled ? "음성 읽어주기 켜짐 (클릭하여 끄기)" : "음성 읽어주기 꺼짐 (클릭하여 켜기)"}
+               onClick={() => setIsTtsEnabled(!isTtsEnabled)}
+               style={{ cursor: 'pointer', color: isTtsEnabled ? '#3b82f6' : '#4b5563', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+             >
+               <Mic size={16} />
+               {isTtsEnabled && (
+                 <span style={{ position: 'absolute', top: '0px', right: '0px', width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#3b82f6' }} />
+               )}
+             </button>
            {isLoggedIn ? (
-             <button 
-               className="icon-btn" 
+             <button
+               className="icon-btn"
                title="로그아웃"
                onClick={(e) => {
                  e.preventDefault();
@@ -179,8 +190,8 @@ const App = () => {
                <LogOut size={18} />
              </button>
            ) : (
-             <button 
-               className="icon-btn" 
+             <button
+               className="icon-btn"
                onClick={() => setShowLoginModal(true)}
                style={{ cursor: 'pointer', color: '#3b82f6' }}
              >
@@ -215,15 +226,6 @@ const App = () => {
         <header className="header">
           <div className="header-logo" onClick={() => setCurrentView('chat')} style={{cursor: 'pointer'}}><Shield size={18} color="#3b82f6" /> SearchLight <MoreVertical size={14} /></div>
           <div style={{display: 'flex', alignItems: 'center', gap: '20px'}}>
-             <button 
-               className="icon-btn" 
-               onClick={() => setIsTtsEnabled(!isTtsEnabled)}
-               title={isTtsEnabled ? "음성 읽어주기 끄기" : "음성 읽어주기 켜기"}
-               style={{ color: isTtsEnabled ? '#3b82f6' : '#9ca3af', display: 'flex', alignItems: 'center' }}
-             >
-               {isTtsEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-             </button>
-             <Settings size={18} cursor="pointer" className="icon-btn" />
              <User size={18} cursor="pointer" className="icon-btn" />
           </div>
         </header>

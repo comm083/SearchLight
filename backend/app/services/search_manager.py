@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 from app.services.nlp_service import nlp_service
 from app.services.intent_classifier import intent_service
 from app.services.vector_db_service import vector_db_service
@@ -202,7 +202,9 @@ class SearchManager:
         if search_results:
             response["ai_report"] = nlp_service.generate_security_report(
                 query=query, contexts=search_results, intent=intent,
-                is_fallback=is_fallback, requested_time=time_info.get("raw", "전체 시간")
+                is_fallback=is_fallback, requested_time=time_info.get("raw", "전체 시간"),
+                start_time=time_info.get("start_time"),
+                end_time=time_info.get("end_time")
             )
         else:
             time_hint = f" ({time_info.get('raw', '')} 기준)" if time_info.get("raw") and time_info.get("raw") != "전체" else ""

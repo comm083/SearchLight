@@ -224,19 +224,25 @@ class KoreanTimeParser:
     def _date_only(self, q: str) -> Optional[TimeRange]:
         d = self._base_date(q)
         # 날짜 관련 키워드나 'X월' 패턴, 'N일 전/후' 패턴이 없으면 None
-        date_keywords = ("어제", "오늘", "내일", "그저께", "그제", "지난주", "저번 주", "지지난주", "이번 주")
+        date_keywords = ("어제", "오늘", "내일", "그저께", "그제", "지난주", "지난 주", "저번 주", "지지난주", "지지난 주", "이번 주", "이번주")
         has_n_days = bool(re.search(r'\d+\s*일\s*(전|후)', q))
         if not any(kw in q for kw in date_keywords) and not re.search(r'\d+\s*월', q) and not has_n_days:
             return None
-        
+
         start = datetime.combine(d, time(0, 0))
         end   = datetime.combine(d, time(23, 59, 59))
-        
+
         # 주 단위 처리 (7일 범위)
-        if any(kw in q for kw in ("지난주", "저번 주", "지지난주", "이번 주")):
+        if any(kw in q for kw in ("지난주", "지난 주", "저번 주", "지지난주", "지지난 주", "이번 주", "이번주")):
             weekday = d.weekday() # 0: Mon, 6: Sun
             start = datetime.combine(d - timedelta(days=weekday), time(0, 0))
-            end = datetime.combine(start + timedelta(days=6), time(23, 59, 59))
+            week_end = datetime.combine(start + timedelta(days=6), time(23, 59, 59))
+            # 이번주는 오늘까지만 — 미래 날짜 제외
+            if "이번주" in q or "이번 주" in q:
+                today_end = datetime.combine(self.now.date(), time(23, 59, 59))
+                end = min(week_end, today_end)
+            else:
+                end = week_end
             return TimeRange(start, end, 0.85, "date_range:week", q)
 
         return TimeRange(start, end, 0.70, "date_only", q)
@@ -265,8 +271,8 @@ class KoreanTimeParser:
         if "그저께" in q or "그제" in q: return today + timedelta(days=-2)
         if "어제" in q:                  return today + timedelta(days=-1)
         if "내일" in q:                  return today + timedelta(days=1)
-        if "지지난주" in q:              return today + timedelta(weeks=-2)
-        if "지난주" in q or "저번 주" in q: return today + timedelta(weeks=-1)
+        if "지지난주" in q or "지지난 주" in q:                          return today + timedelta(weeks=-2)
+        if "지난주" in q or "지난 주" in q or "저번 주" in q:           return today + timedelta(weeks=-1)
         return today
 
     def _ampm_offset(self, q: str) -> int:

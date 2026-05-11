@@ -442,9 +442,10 @@ ANALYSIS_PROMPT = """
 - 물건이나 기물의 상태 변화(파손·전도·이동 등)
 - 이상 징후 여부 및 위험도 판단
 
-출력 예:
+출력 형식 (JSON만 출력):
 {
-  "summary": "..."
+  "summary": "등장 인물 외형·행동·이상 징후를 상세히 기술한 전체 보고서",
+  "short_summary": "핵심 상황을 2문장 이내로 요약 (카드 미리보기용)"
 }
 """
 
@@ -866,6 +867,7 @@ def process_video(video_path: str, model_type="world"):
         return
 
     summary = video_info.get("summary", "")
+    short_summary = video_info.get("short_summary", "")
     client_obj = OpenAI(api_key=api_key)
 
     if not has_event:
@@ -901,6 +903,7 @@ def process_video(video_path: str, model_type="world"):
             "video_filename": video_file,
             "timestamp":      event_timestamp,
             "summary":        summary,
+            "short_summary":  short_summary,
             "count_people":   max_person_count,
             "situation":      situation,
         }).execute()
