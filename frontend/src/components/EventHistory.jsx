@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Download, Play, MapPin, Clock, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Download, Play, MapPin, Clock, AlertTriangle, ChevronLeft, ChevronRight, Trash2, Lock } from 'lucide-react';
 
 const formatCctvTime = (ts) => {
   if (!ts) return '';
@@ -47,7 +47,9 @@ const VIEW_MODES = [
   { label: '월별', value: 'monthly' },
 ];
 
-const EventHistory = () => {
+const EventHistory = ({ user }) => {
+  const isAdmin = user?.role === '관리자';
+
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
@@ -125,6 +127,16 @@ const EventHistory = () => {
     return `${y}년 ${parseInt(m)}월`;
   };
 
+  const handleDelete = async (eventId) => {
+    if (!window.confirm('이 이벤트를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return;
+    try {
+      await fetch(`http://localhost:8000/api/alerts/events/${eventId}`, { method: 'DELETE' });
+      setEvents(prev => prev.filter(e => e.id !== eventId));
+    } catch (err) {
+      alert('삭제 중 오류가 발생했습니다.');
+    }
+  };
+
   const handleDownload = () => {
     if (filteredEvents.length === 0) { alert("다운로드할 이벤트가 없습니다."); return; }
     const headers = ["ID", "이벤트 내용", "위치", "발생 시각", "상황"];
@@ -156,12 +168,18 @@ const EventHistory = () => {
             <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 8px 0', color: '#fff' }}>영상 보관함</h1>
             <p style={{ color: '#9ca3af', margin: 0, fontSize: '14px' }}>감지된 모든 보안 이벤트 영상을 조회하고 검색합니다.</p>
           </div>
-          <button
-            style={{ backgroundColor: '#60a5fa', color: '#0f172a', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}
-            onClick={handleDownload}
-          >
-            <Download size={16} /> 다운로드
-          </button>
+          {isAdmin ? (
+            <button
+              style={{ backgroundColor: '#60a5fa', color: '#0f172a', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px' }}
+              onClick={handleDownload}
+            >
+              <Download size={16} /> 다운로드
+            </button>
+          ) : (
+            <div title="관리자만 다운로드할 수 있습니다" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#4b5563', fontSize: '13px', padding: '8px 16px', borderRadius: '6px', border: '1px solid #1e293b', cursor: 'not-allowed' }}>
+              <Lock size={14} /> 다운로드
+            </div>
+          )}
         </div>
 
         {/* 뷰 모드 탭 + 날짜 네비게이터 + 검색 */}
@@ -300,7 +318,7 @@ const EventHistory = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '14px', marginBottom: 'auto' }}>
                       <Clock size={14} /> {formatCctvTime(event.timestamp)}
                     </div>
-                    <div style={{ display: 'flex', gap: '12px', marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '20px' }}>
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '20px', alignItems: 'center' }}>
                       <button
                         style={{ backgroundColor: hasClip ? '#60a5fa' : '#334155', color: hasClip ? '#0f172a' : '#6b7280', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: hasClip ? 'pointer' : 'not-allowed', fontSize: '13px' }}
                         onClick={() => hasClip && setModalUrl(event.clip_url)}
@@ -308,6 +326,15 @@ const EventHistory = () => {
                       >
                         <Play size={14} /> 영상 보기
                       </button>
+                      {isAdmin && (
+                        <button
+                          title="이벤트 삭제"
+                          style={{ marginLeft: 'auto', backgroundColor: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)', padding: '8px 14px', borderRadius: '6px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '13px' }}
+                          onClick={() => handleDelete(event.id)}
+                        >
+                          <Trash2 size={14} /> 삭제
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
