@@ -374,46 +374,55 @@ def encode_video_and_extract_clips(video_path: str, model_type="world"):
 
         import imageio_ffmpeg
         ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+        import subprocess
 
         MAX_CLIP_SEC = 60
+        max_clip_frames = int(fps * MAX_CLIP_SEC)
+        clip_counter = 0
+
         for i, (s_frame, e_frame) in enumerate(groups):
             s_frame = max(0, s_frame - int(fps * 2))
             e_frame = min(total_frames - 1, e_frame + int(fps * 2))
-            # 클립 최대 길이 제한 (Supabase 용량 초과 방지)
-            e_frame = min(e_frame, s_frame + int(fps * MAX_CLIP_SEC))
-            s_sec   = round(s_frame / fps, 2)
-            e_sec   = round(e_frame / fps, 2)
 
-            raw_path = os.path.join(tempfile.gettempdir(), f"raw_{i+1}_{os.path.basename(video_path)}")
-            out_path = os.path.join(tempfile.gettempdir(), f"clip_{i+1}_{os.path.basename(video_path)}")
+            # 60초 초과 시 분할하여 여러 클립 생성
+            sub_start = s_frame
+            sub_idx = 0
+            while sub_start <= e_frame:
+                sub_end = min(e_frame, sub_start + max_clip_frames - 1)
+                sub_idx += 1
+                clip_counter += 1
 
-            # mp4v로 원본 저장 (바운딩 박스 오버레이 포함)
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            writer = cv2.VideoWriter(raw_path, fourcc, fps, (out_w, out_h))
-            model = get_yolo_model(model_type)
-            video2.set(cv2.CAP_PROP_POS_FRAMES, s_frame)
-            for fi in range(e_frame - s_frame + 1):
-                ok, frm = video2.read()
-                if not ok:
-                    break
-                if (out_w, out_h) != (width, height):
-                    frm = cv2.resize(frm, (out_w, out_h))
-                results = model(frm, conf=0.1, verbose=False)
-                frm = _draw_filtered_boxes(frm, results[0], model)
-                writer.write(frm)
-            writer.release()
+                s_sec = round(sub_start / fps, 2)
+                e_sec = round(sub_end / fps, 2)
 
-            # ffmpeg로 H.264 변환 (브라우저 재생 가능)
-            import subprocess
-            subprocess.run([
-                ffmpeg_exe, "-y", "-i", raw_path,
-                "-vcodec", "libx264", "-crf", "28", "-preset", "fast",
-                "-movflags", "+faststart", out_path
-            ], capture_output=True)
-            if os.path.exists(raw_path):
-                os.remove(raw_path)
+                raw_path = os.path.join(tempfile.gettempdir(), f"raw_{i+1}_{sub_idx}_{os.path.basename(video_path)}")
+                out_path = os.path.join(tempfile.gettempdir(), f"clip_{i+1}_{sub_idx}_{os.path.basename(video_path)}")
 
-            person_clips.append((s_sec, e_sec, out_path))
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                writer = cv2.VideoWriter(raw_path, fourcc, fps, (out_w, out_h))
+                model = get_yolo_model(model_type)
+                video2.set(cv2.CAP_PROP_POS_FRAMES, sub_start)
+                for fi in range(sub_end - sub_start + 1):
+                    ok, frm = video2.read()
+                    if not ok:
+                        break
+                    if (out_w, out_h) != (width, height):
+                        frm = cv2.resize(frm, (out_w, out_h))
+                    results = model(frm, conf=0.1, verbose=False)
+                    frm = _draw_filtered_boxes(frm, results[0], model)
+                    writer.write(frm)
+                writer.release()
+
+                subprocess.run([
+                    ffmpeg_exe, "-y", "-i", raw_path,
+                    "-vcodec", "libx264", "-crf", "28", "-preset", "fast",
+                    "-movflags", "+faststart", out_path
+                ], capture_output=True)
+                if os.path.exists(raw_path):
+                    os.remove(raw_path)
+
+                person_clips.append((s_sec, e_sec, out_path))
+                sub_start = sub_end + 1
 
         video2.release()
 
@@ -689,13 +698,45 @@ CREATE TABLE IF NOT EXISTS event_intents (
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 4. 인덱스
-CREATE INDEX IF NOT EXISTS idx_normal_timestamp      ON normal(timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_event_timestamp       ON event(timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_event_situation       ON event(situation);
-CREATE INDEX IF NOT EXISTS idx_event_intents_event_id ON event_intents(event_id);
+-- 4. 이벤트 클립 테이블 (event 당 여러 클립 지원)
+CREATE TABLE IF NOT EXISTS event_clips (
+    id          UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    event_id    UUID        REFERENCES event(id) ON DELETE CASCADE,
+    clip_url    TEXT,
+    start_sec   NUMERIC,
+    end_sec     NUMERIC,
+    clip_index  INT         DEFAULT 1,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
 
--- 5. 크롭 객체 이미지 테이블 (CLIP 벡터 검색용)
+-- 5. 인덱스
+CREATE INDEX IF NOT EXISTS idx_normal_timestamp       ON normal(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_event_timestamp        ON event(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_event_situation        ON event(situation);
+CREATE INDEX IF NOT EXISTS idx_event_intents_event_id ON event_intents(event_id);
+CREATE INDEX IF NOT EXISTS idx_event_clips_event_id   ON event_clips(event_id);
+
+-- 6. 영상 처리 감사 로그 테이블
+CREATE TABLE IF NOT EXISTS processing_log (
+    id              UUID        DEFAULT gen_random_uuid() PRIMARY KEY,
+    video_filename  TEXT        NOT NULL,
+    model_type      TEXT,
+    status          TEXT        NOT NULL,
+    situation       TEXT,
+    frame_count     INT         DEFAULT 0,
+    motion_count    INT         DEFAULT 0,
+    max_people      INT         DEFAULT 0,
+    clip_count      INT         DEFAULT 0,
+    error_message   TEXT,
+    duration_sec    NUMERIC,
+    processed_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_processing_log_video  ON processing_log(video_filename);
+CREATE INDEX IF NOT EXISTS idx_processing_log_status ON processing_log(status);
+CREATE INDEX IF NOT EXISTS idx_processing_log_time   ON processing_log(processed_at DESC);
+
+-- 7. 크롭 객체 이미지 테이블 (CLIP 벡터 검색용)
 CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE IF NOT EXISTS cropped_objects (
@@ -739,7 +780,7 @@ LANGUAGE sql STABLE AS $$
     LIMIT  match_count;
 $$;
 
--- 6. Storage 버킷 생성 (이미 있으면 건너뜀)
+-- 8. Storage 버킷 생성 (이미 있으면 건너뜀)
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('cctv-clips', 'cctv-clips', true)
 ON CONFLICT (id) DO NOTHING;
@@ -752,9 +793,35 @@ ON CONFLICT (id) DO NOTHING;
 
 
 # ─────────────────────────────────────────────
+# 감사 로그 저장
+# ─────────────────────────────────────────────
+def _save_processing_log(supabase, video_file: str, model_type: str, status: str,
+                          situation=None, frame_count=0, motion_count=0,
+                          max_people=0, clip_count=0, error_message=None, duration_sec=None):
+    try:
+        supabase.table('processing_log').insert({
+            "video_filename": video_file,
+            "model_type":     model_type,
+            "status":         status,
+            "situation":      situation,
+            "frame_count":    frame_count,
+            "motion_count":   motion_count,
+            "max_people":     max_people,
+            "clip_count":     clip_count,
+            "error_message":  error_message,
+            "duration_sec":   duration_sec,
+        }).execute()
+    except Exception as e:
+        print(f"  [감사 로그 저장 실패] {e}")
+
+
+# ─────────────────────────────────────────────
 # 단일 영상 처리
 # ─────────────────────────────────────────────
 def process_video(video_path: str, model_type="world"):
+    import time
+    t_start = time.time()
+
     supabase = get_supabase_client()
     video_file = os.path.basename(video_path)
     print(f"\n[처리] {video_file} (모델: {model_type})")
@@ -764,20 +831,29 @@ def process_video(video_path: str, model_type="world"):
     already_in_normal = supabase.table('normal').select('id').eq('video_filename', video_file).limit(1).execute()
     if (already_in_event.data or already_in_normal.data):
         print(f"  -> 이미 처리된 영상입니다. 스킵합니다.")
+        _save_processing_log(supabase, video_file, model_type, status="skipped")
         return
 
     # 프레임 추출 + 클립 추출 + 타임스탬프 OCR + 크롭 후보
-    frames, person_clips, start_timestamp, detected_objects, max_person_count, crop_candidates = encode_video_and_extract_clips(video_path, model_type=model_type)
+    try:
+        frames, person_clips, start_timestamp, detected_objects, max_person_count, crop_candidates = encode_video_and_extract_clips(video_path, model_type=model_type)
+    except Exception as e:
+        print(f"  -> [프레임 추출 실패] {e}")
+        _save_processing_log(supabase, video_file, model_type, status="failed", error_message=str(e),
+                             duration_sec=round(time.time() - t_start, 1))
+        return
+
     if not frames:
         print("  -> 프레임을 추출할 수 없습니다.")
+        _save_processing_log(supabase, video_file, model_type, status="failed", error_message="프레임 없음",
+                             duration_sec=round(time.time() - t_start, 1))
         return
 
     if start_timestamp is None:
-        start_timestamp = _generate_random_timestamp()
-        print(f"  [OCR 실패] 랜덤 타임스탬프 할당: {start_timestamp}")
+        print(f"  [OCR 실패] 타임스탬프를 읽지 못했습니다. NULL로 저장합니다.")
 
     has_event = len(person_clips) > 0
-    print(f"  분석 프레임: {len(frames)}장 | 이벤트: {'있음' if has_event else '없음'} | 시작 시각: {start_timestamp}")
+    print(f"  분석 프레임: {len(frames)}장 | 이벤트: {'있음' if has_event else '없음'} | 시작 시각: {start_timestamp or 'NULL'}")
 
     # GPT 분석
     print(f"  GPT 분석 중... ({len(frames)}프레임 전송)")
@@ -785,7 +861,9 @@ def process_video(video_path: str, model_type="world"):
         video_info = analyze_frames(frames, detected_objects)
     except Exception as e:
         print(f"  -> [GPT 실패] {type(e).__name__}: {e}")
-        video_info = {"summary": f"GPT 분석 실패: {e}", "frames": []}
+        _save_processing_log(supabase, video_file, model_type, status="failed", error_message=f"GPT 실패: {e}",
+                             frame_count=len(frames), duration_sec=round(time.time() - t_start, 1))
+        return
 
     summary = video_info.get("summary", "")
     client_obj = OpenAI(api_key=api_key)
@@ -798,8 +876,12 @@ def process_video(video_path: str, model_type="world"):
             "summary":        summary,
         }).execute()
         print(f"  -> normal 저장 완료 (id: {result.data[0]['id']})")
+        _save_processing_log(supabase, video_file, model_type, status="success",
+                             situation="normal", frame_count=len(frames),
+                             max_people=max_person_count, clip_count=0,
+                             duration_sec=round(time.time() - t_start, 1))
     else:
-        # ── 이벤트 있음: 클립마다 event 행 각각 생성 ──
+        # ── 이벤트 있음: event 행 하나 생성 → 클립은 event_clips에 저장 ──
         print("  상황 분류 중 (GPT)...")
         situation = classify_situation(client_obj, summary, detected_objects) or "normal"
         print(f"  -> 상황: {situation}")
@@ -807,8 +889,38 @@ def process_video(video_path: str, model_type="world"):
         print("  의도별 문장 생성 중 (GPT)...")
         intent_sentences = generate_intent_sentences(client_obj, summary)
 
-        base_dt = datetime.strptime(start_timestamp, "%Y-%m-%d %H:%M:%S")
+        if start_timestamp:
+            base_dt = datetime.strptime(start_timestamp, "%Y-%m-%d %H:%M:%S")
+            first_s_sec = person_clips[0][0]
+            event_timestamp = (base_dt + timedelta(seconds=first_s_sec)).strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            event_timestamp = None
 
+        # event 행 하나 생성
+        result = supabase.table('event').insert({
+            "video_filename": video_file,
+            "timestamp":      event_timestamp,
+            "summary":        summary,
+            "count_people":   max_person_count,
+            "situation":      situation,
+        }).execute()
+        event_id = result.data[0]['id']
+        print(f"  -> event 저장 완료 (id: {event_id}, 클립 수: {len(person_clips)})")
+
+        try:
+            supabase.table('event_intents').insert({
+                "event_id":    event_id,
+                "time_sent":   intent_sentences.get("time_sent", ""),
+                "count_sent":  intent_sentences.get("count_sent", ""),
+                "action_sent": intent_sentences.get("action_sent", ""),
+                "info_sent":   intent_sentences.get("info_sent", ""),
+                "error_sent":  intent_sentences.get("error_sent", ""),
+            }).execute()
+            print(f"  -> event_intents 저장 완료")
+        except Exception as e:
+            print(f"  -> [event_intents 저장 실패] {e}")
+
+        # 클립마다 event_clips에 저장
         for i, (s_sec, e_sec, clip_path) in enumerate(person_clips, start=1):
             storage_name = f"{os.path.splitext(video_file)[0]}_clip{i}_{int(s_sec)}s-{int(e_sec)}s.mp4"
             clip_url = None
@@ -821,35 +933,27 @@ def process_video(video_path: str, model_type="world"):
                 if os.path.exists(clip_path):
                     os.remove(clip_path)
 
-            clip_timestamp = (base_dt + timedelta(seconds=s_sec)).strftime("%Y-%m-%d %H:%M:%S")
-            result = supabase.table('event').insert({
-                "video_filename": video_file,
-                "timestamp":      clip_timestamp,
-                "summary":        summary,
-                "count_people":   max_person_count,
-                "situation":      situation,
-                "clip_url":       clip_url,
-            }).execute()
-            event_id = result.data[0]['id']
-            print(f"  -> event 저장 완료 (clip {i}, id: {event_id}, clip_url: {'있음' if clip_url else '없음'})")
-
             try:
-                supabase.table('event_intents').insert({
-                    "event_id":    event_id,
-                    "time_sent":   intent_sentences.get("time_sent", ""),
-                    "count_sent":  intent_sentences.get("count_sent", ""),
-                    "action_sent": intent_sentences.get("action_sent", ""),
-                    "info_sent":   intent_sentences.get("info_sent", ""),
-                    "error_sent":  intent_sentences.get("error_sent", ""),
+                supabase.table('event_clips').insert({
+                    "event_id":   event_id,
+                    "clip_url":   clip_url,
+                    "start_sec":  s_sec,
+                    "end_sec":    e_sec,
+                    "clip_index": i,
                 }).execute()
-                print(f"  -> event_intents 저장 완료 (clip {i})")
+                print(f"  -> event_clips 저장 완료 (clip {i}, clip_url: {'있음' if clip_url else '없음'})")
             except Exception as e:
-                print(f"  -> [event_intents 저장 실패] {e}")
+                print(f"  -> [event_clips 저장 실패] {e}")
 
-            # 크롭 객체 CLIP 임베딩 저장 (첫 번째 클립 이벤트 기준으로만 저장)
-            if i == 1 and crop_candidates:
-                print(f"  크롭 객체 CLIP 임베딩 저장 중... ({len(crop_candidates)}개)")
-                save_crops_to_db(supabase, event_id, video_file, start_timestamp, crop_candidates)
+        # 크롭 객체 CLIP 임베딩 저장
+        if crop_candidates:
+            print(f"  크롭 객체 CLIP 임베딩 저장 중... ({len(crop_candidates)}개)")
+            save_crops_to_db(supabase, event_id, video_file, start_timestamp, crop_candidates)
+
+        _save_processing_log(supabase, video_file, model_type, status="success",
+                             situation=situation, frame_count=len(frames),
+                             max_people=max_person_count, clip_count=len(person_clips),
+                             duration_sec=round(time.time() - t_start, 1))
 
 
 # ─────────────────────────────────────────────

@@ -13,6 +13,7 @@ import MessageItem from './components/chat/MessageItem';
 import ResultCard from './components/chat/ResultCard';
 import EventHistory from './components/EventHistory';
 import Dashboard from './components/Dashboard';
+import PendingVideos from './components/PendingVideos';
 import LoginModal from './components/LoginModal';
 
 const App = () => {
@@ -28,8 +29,24 @@ const App = () => {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [currentView, setCurrentView] = useState('chat');
   const [isTtsEnabled, setIsTtsEnabled] = useState(true);
+  const [pendingCount, setPendingCount] = useState(0);
 
   const chatEndRef = useRef(null);
+
+  useEffect(() => {
+    const fetchPendingCount = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/api/alerts/events/pending?limit=100');
+        if (res.ok) {
+          const data = await res.json();
+          setPendingCount(data.length);
+        }
+      } catch {}
+    };
+    fetchPendingCount();
+    const interval = setInterval(fetchPendingCount, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [isResizing, setIsResizing] = useState(false);
@@ -90,6 +107,19 @@ const App = () => {
       {/* Sidebar - Simplified for refactoring */}
       <aside className="sidebar" style={{ width: `${sidebarWidth}px`, flexShrink: 0 }}>
         <button className={`new-chat-btn ${currentView === 'archive' ? 'active' : ''}`} style={{ marginBottom: '8px', backgroundColor: currentView === 'archive' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }} onClick={() => setCurrentView('archive')}><Archive size={18} /><span>영상 보관함</span></button>
+        <button
+          className={`new-chat-btn ${currentView === 'pending' ? 'active' : ''}`}
+          style={{ marginBottom: '8px', position: 'relative', backgroundColor: currentView === 'pending' ? (pendingCount > 0 ? 'rgba(234,179,8,0.25)' : 'rgba(34,197,94,0.2)') : (pendingCount > 0 ? 'rgba(234,179,8,0.1)' : 'rgba(34,197,94,0.08)'), color: pendingCount > 0 ? '#fbbf24' : '#4ade80', border: `1px solid ${pendingCount > 0 ? 'rgba(234,179,8,0.3)' : 'rgba(34,197,94,0.2)'}` }}
+          onClick={() => setCurrentView('pending')}
+        >
+          <span style={{ fontSize: '16px' }}>⏳</span>
+          <span>처리대기 영상</span>
+          {pendingCount > 0 && (
+            <span style={{ position: 'absolute', top: '6px', right: '8px', backgroundColor: '#f59e0b', color: '#0f172a', borderRadius: '10px', fontSize: '11px', fontWeight: '700', padding: '1px 6px', minWidth: '18px', textAlign: 'center', lineHeight: '16px' }}>
+              {pendingCount}
+            </span>
+          )}
+        </button>
         <button className={`new-chat-btn ${currentView === 'dashboard' ? 'active' : ''}`} style={{ marginBottom: '10px', backgroundColor: currentView === 'dashboard' ? 'rgba(249, 115, 22, 0.2)' : 'rgba(249, 115, 22, 0.08)', color: '#fb923c', border: '1px solid rgba(249, 115, 22, 0.2)' }} onClick={() => setCurrentView('dashboard')}><BarChart2 size={18} /><span>통계 대시보드</span></button>
         <button className="new-chat-btn" onClick={() => { startNewChat(); setCurrentView('chat'); }}><Plus size={18} /><span>새 채팅</span></button>
         <div className="search-box">
@@ -200,6 +230,8 @@ const App = () => {
 
         {currentView === 'archive' ? (
           <EventHistory user={user} />
+        ) : currentView === 'pending' ? (
+          <PendingVideos />
         ) : currentView === 'dashboard' ? (
           <Dashboard />
         ) : (
