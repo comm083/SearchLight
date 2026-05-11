@@ -11,6 +11,7 @@ class SearchManager:
         self.time_parser = KoreanTimeParser()
         self.pronouns = ["그", "거기", "그때", "이전", "다시", "아까", "마지막", "방금", "방금 전"]
         self.feature_keywords = ["빨간", "파란", "검은", "하얀", "초록", "노란", "정장", "청바지", "가방", "배낭", "차량", "자동차", "오토바이", "헬멧", "모자", "안경", "마스크", "후드"]
+        self.behavioral_keywords = ["싸우", "충돌", "폭행", "싸움", "다툼", "위험", "사고", "쓰러", "넘어", "도주", "도망", "침입", "절도", "훔치", "뺏", "협박", "위협", "방화", "불", "연기", "폭발", "난동", "행패", "소란", "추격", "도둑", "강도"]
         self.intent_messages = {
             "GENERAL": "일반 검색 결과를 표시합니다.",
             "SUMMARIZATION": "요약 정보를 표시합니다.",
@@ -46,6 +47,11 @@ class SearchManager:
             current_intent = memory["last_intent"]
             intent_result.intent = current_intent
             context_used = True
+
+        # 3-3. 위험/행동 키워드가 있으면 LOCALIZATION 오분류 보정
+        if current_intent == "LOCALIZATION" and any(kw in corrected_query for kw in self.behavioral_keywords):
+            current_intent = "BEHAVIORAL"
+            intent_result.intent = current_intent
 
         # 4. 시간 표현 파싱
         time_info = self._parse_time(corrected_query, has_pronoun, memory)

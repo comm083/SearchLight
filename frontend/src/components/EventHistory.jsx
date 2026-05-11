@@ -57,6 +57,8 @@ const EventHistory = ({ user }) => {
   const [viewMode, setViewMode] = useState('daily');
   const [anchorDate, setAnchorDate] = useState(() => toDateStr(new Date()));
   const [modalUrl, setModalUrl] = useState(null);
+  // 이벤트별 현재 선택된 클립 인덱스 (eventId → clipArrayIndex)
+  const [clipIndices, setClipIndices] = useState({});
 
   useEffect(() => { fetchEvents(); }, []);
 
@@ -283,16 +285,32 @@ const EventHistory = ({ user }) => {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {filteredEvents.map((event, idx) => {
-              const hasClip = !!event.clip_url;
+              const clips = (event.clips && event.clips.length > 0)
+                ? event.clips
+                : (event.clip_url ? [{ clip_url: event.clip_url, clip_index: 1 }] : []);
+              const totalClips = clips.length;
+              const curClipIdx = clipIndices[event.id] ?? 0;
+              const curClip = clips[curClipIdx];
+              const hasClip = !!curClip?.clip_url;
               const isAbnormal = event.tag && event.tag !== 'normal';
+
+              const goClip = (dir, e) => {
+                e.stopPropagation();
+                setClipIndices(prev => ({
+                  ...prev,
+                  [event.id]: Math.max(0, Math.min(totalClips - 1, (prev[event.id] ?? 0) + dir)),
+                }));
+              };
+
               return (
                 <div key={idx} style={{ backgroundColor: '#1e293b', borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'row', border: '1px solid #334155' }}>
+                  {/* 썸네일 영역 */}
                   <div
                     style={{ width: '280px', height: '200px', position: 'relative', flexShrink: 0, cursor: hasClip ? 'pointer' : 'default', backgroundColor: '#0b0f19' }}
-                    onClick={() => hasClip && setModalUrl(event.clip_url)}
+                    onClick={() => hasClip && setModalUrl(curClip.clip_url)}
                   >
                     {hasClip ? (
-                      <video src={event.clip_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted preload="metadata" />
+                      <video key={curClip.clip_url} src={curClip.clip_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted preload="metadata" />
                     ) : (
                       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563', fontSize: '13px' }}>클립 없음</div>
                     )}
@@ -308,8 +326,15 @@ const EventHistory = ({ user }) => {
                         <AlertTriangle size={11} /> {event.tag}
                       </div>
                     )}
+                    {/* 클립 번호 배지 */}
+                    {totalClips > 1 && (
+                      <div style={{ position: 'absolute', bottom: '10px', right: '10px', backgroundColor: 'rgba(0,0,0,0.65)', color: '#e2e8f0', fontSize: '12px', fontWeight: '600', padding: '3px 8px', borderRadius: '12px' }}>
+                        {curClipIdx + 1} / {totalClips}
+                      </div>
+                    )}
                   </div>
 
+                  {/* 정보 영역 */}
                   <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', flex: 1 }}>
                     <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#fff', margin: '0 0 12px 0', lineHeight: '1.4' }}>{event.title}</h3>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>
@@ -318,14 +343,36 @@ const EventHistory = ({ user }) => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '14px', marginBottom: 'auto' }}>
                       <Clock size={14} /> {formatCctvTime(event.timestamp)}
                     </div>
-                    <div style={{ display: 'flex', gap: '12px', marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '20px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '20px', alignItems: 'center' }}>
                       <button
                         style={{ backgroundColor: hasClip ? '#60a5fa' : '#334155', color: hasClip ? '#0f172a' : '#6b7280', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', cursor: hasClip ? 'pointer' : 'not-allowed', fontSize: '13px' }}
-                        onClick={() => hasClip && setModalUrl(event.clip_url)}
+                        onClick={() => hasClip && setModalUrl(curClip.clip_url)}
                         disabled={!hasClip}
                       >
                         <Play size={14} /> 영상 보기
                       </button>
+                      {/* 클립 네비게이션 */}
+                      {totalClips > 1 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '8px' }}>
+                          <button
+                            onClick={(e) => goClip(-1, e)}
+                            disabled={curClipIdx === 0}
+                            style={{ background: 'none', border: '1px solid #334155', color: curClipIdx === 0 ? '#4b5563' : '#9ca3af', borderRadius: '4px', width: '28px', height: '28px', cursor: curClipIdx === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          >
+                            <ChevronLeft size={14} />
+                          </button>
+                          <span style={{ fontSize: '12px', color: '#9ca3af', minWidth: '48px', textAlign: 'center' }}>
+                            클립 {curClipIdx + 1}/{totalClips}
+                          </span>
+                          <button
+                            onClick={(e) => goClip(1, e)}
+                            disabled={curClipIdx === totalClips - 1}
+                            style={{ background: 'none', border: '1px solid #334155', color: curClipIdx === totalClips - 1 ? '#4b5563' : '#9ca3af', borderRadius: '4px', width: '28px', height: '28px', cursor: curClipIdx === totalClips - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          >
+                            <ChevronRight size={14} />
+                          </button>
+                        </div>
+                      )}
                       {isAdmin && (
                         <button
                           title="이벤트 삭제"

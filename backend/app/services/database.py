@@ -145,10 +145,11 @@ class SupabaseService:
     def get_all_events(self, limit: int = 50):
         """
         영상 보관함(Event History)에 표시할 이벤트 데이터를 모두 가져옵니다.
+        event_clips 테이블에서 클립 목록을 조인하며, 없으면 clip_url로 폴백합니다.
         """
         try:
             response = self.supabase.table('event') \
-                .select('id, summary, timestamp, video_filename, situation, clip_url') \
+                .select('id, summary, timestamp, video_filename, situation, clip_url, event_clips(id, clip_url, start_sec, end_sec, clip_index)') \
                 .order('timestamp', desc=True) \
                 .limit(limit) \
                 .execute()
@@ -156,12 +157,34 @@ class SupabaseService:
             events = []
             if response.data:
                 for item in response.data:
+                    raw_clips = item.get('event_clips') or []
+                    raw_clips_sorted = sorted(raw_clips, key=lambda c: c.get('clip_index', 0))
+
+                    if raw_clips_sorted:
+                        clips = [
+                            {
+                                "clip_url":   c.get('clip_url'),
+                                "start_sec":  c.get('start_sec'),
+                                "end_sec":    c.get('end_sec'),
+                                "clip_index": c.get('clip_index'),
+                            }
+                            for c in raw_clips_sorted
+                        ]
+                    elif item.get('clip_url'):
+                        # 기존 데이터 호환: event.clip_url을 단일 클립으로 처리
+                        clips = [{"clip_url": item['clip_url'], "start_sec": None, "end_sec": None, "clip_index": 1}]
+                    else:
+                        clips = []
+
+                    first_clip_url = clips[0]['clip_url'] if clips else None
+
                     events.append({
                         "id": item.get('id'),
                         "title": item.get('summary', '보안 이벤트 기록'),
                         "location": item.get('video_filename', '미상'),
                         "timestamp": item.get('timestamp', ''),
-                        "clip_url": item.get('clip_url'),
+                        "clip_url": first_clip_url,
+                        "clips": clips,
                         "tag": item.get('situation', 'normal'),
                         "image_path": None,
                         "confidence": None,
@@ -170,6 +193,57 @@ class SupabaseService:
         except Exception as e:
             print(f"[Supabase Error] 이벤트 목록 조회 실패: {e}")
             return []
+
+    def get_pending_events(self, limit: int = 100):
+        """
+        timestamp가 NULL인 이벤트(처리대기영상)를 반환합니다.
+        """
+        try:
+            response = self.supabase.table('event') \
+                .select('id, summary, timestamp, video_filename, situation, clip_url, event_clips(id, clip_url, start_sec, end_sec, clip_index)') \
+                .is_('timestamp', 'null') \
+                .order('id', desc=True) \
+                .limit(limit) \
+                .execute()
+
+            events = []
+            if response.data:
+                for item in response.data:
+                    raw_clips = item.get('event_clips') or []
+                    raw_clips_sorted = sorted(raw_clips, key=lambda c: c.get('clip_index', 0))
+                    if raw_clips_sorted:
+                        clips = [{"clip_url": c.get('clip_url'), "start_sec": c.get('start_sec'), "end_sec": c.get('end_sec'), "clip_index": c.get('clip_index')} for c in raw_clips_sorted]
+                    elif item.get('clip_url'):
+                        clips = [{"clip_url": item['clip_url'], "start_sec": None, "end_sec": None, "clip_index": 1}]
+                    else:
+                        clips = []
+                    events.append({
+                        "id": item.get('id'),
+                        "title": item.get('summary', '보안 이벤트 기록'),
+                        "location": item.get('video_filename', '미상'),
+                        "timestamp": None,
+                        "clip_url": clips[0]['clip_url'] if clips else None,
+                        "clips": clips,
+                        "tag": item.get('situation', 'normal'),
+                    })
+            return events
+        except Exception as e:
+            print(f"[Supabase Error] 처리대기 이벤트 조회 실패: {e}")
+            return []
+
+    def update_event_timestamp(self, event_id: str, timestamp: str) -> bool:
+        """
+        특정 이벤트의 timestamp를 수동으로 업데이트합니다.
+        """
+        try:
+            self.supabase.table('event') \
+                .update({"timestamp": timestamp}) \
+                .eq('id', event_id) \
+                .execute()
+            return True
+        except Exception as e:
+            print(f"[Supabase Error] timestamp 업데이트 실패: {e}")
+            return False
 
     def delete_event(self, event_id: str) -> bool:
         try:
