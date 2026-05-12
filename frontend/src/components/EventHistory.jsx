@@ -21,6 +21,21 @@ const formatClipTime = (eventTs, firstStartSec, curStartSec) => {
   return `${y}. ${m}. ${day}. ${ampm} ${h12}:${mi}:${s}`;
 };
 
+const cleanSummary = (text) => {
+  if (!text) return text;
+  return text
+    .split(/\n/)
+    .map(line =>
+      line
+        .split(/(?<=\.)\s+/)
+        .filter(s => !/(이상 징후는 없음|이상 징후가 없|보이지 않으나.*없음|이상 징후.*관찰되지 않|특이 사항.*없음)/.test(s))
+        .join(' ')
+        .trim()
+    )
+    .filter(Boolean)
+    .join('\n');
+};
+
 const getRawDate = (ts) => {
   if (!ts) return '';
   const d = new Date(ts);
@@ -441,7 +456,7 @@ const EventHistory = ({ user }) => {
                 </span>
               </div>
               <p style={{ fontSize: '14px', color: '#cbd5e1', lineHeight: '1.8', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'keep-all' }}>
-                {modalData.event.title}
+                {cleanSummary(modalData.event.title)}
               </p>
             </div>
           </div>

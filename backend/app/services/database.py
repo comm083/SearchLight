@@ -102,46 +102,6 @@ class SupabaseService:
             print(f"[Supabase Error] 히스토리 삭제 실패: {e}")
             return False
 
-    def save_alert(self, alert_data: dict):
-        """
-        실시간 감지된 이상 행동 알림을 Supabase 'alerts' 테이블에 저장합니다.
-        """
-        if not self.supabase:
-            print(f"[Mock DB] 알림 기록 (DB 연결 없음): {alert_data.get('type')}")
-            return
-        try:
-            response = self.supabase.table('alerts').insert(alert_data).execute()
-            print(f"[Supabase] 실시간 알림 DB 저장 성공: {alert_data.get('type')}")
-        except Exception as e:
-            # 테이블이 없거나 권한 문제일 수 있으므로 에러 메시지 출력
-            print(f"[Supabase Error] 알림 저장 실패: {e}")
-
-    def get_latest_status(self, location: str = None):
-        """
-        특정 구역 또는 전체 구역의 가장 최신 보안 이벤트를 가져옵니다. (Localization 용)
-        """
-        try:
-            query = self.supabase.table('cctv_vectors').select('content, metadata').order('metadata->timestamp', desc=True).limit(1)
-            
-            if location:
-                # location 필터링 (metadata 내의 location 필드 기준)
-                # Supabase에서는 json 필터링이 가능함
-                query = query.filter('metadata->>location', 'eq', location)
-            
-            response = query.execute()
-            if response.data:
-                item = response.data[0]
-                return {
-                    "description": item['content'],
-                    "timestamp": item['metadata'].get('timestamp'),
-                    "location": item['metadata'].get('location'),
-                    "image_path": item['metadata'].get('image_path')
-                }
-            return None
-        except Exception as e:
-            print(f"[Supabase Error] 최신 상태 조회 실패: {e}")
-            return None
-
     def get_all_events(self, limit: int = 50):
         """
         영상 보관함(Event History)에 표시할 이벤트 데이터를 모두 가져옵니다.
@@ -324,20 +284,101 @@ class SupabaseService:
         if not self.supabase:
             print(f"[Mock DB] 피드백 기록: ID={history_id}, 타입={feedback_type}")
             return False
-            
+
         try:
             data = {"feedback": feedback_type}
             if comment:
                 data["feedback_comment"] = comment
-                
-            response = self.supabase.table('search_logs') \
+
+            self.supabase.table('search_logs') \
                 .update(data) \
                 .eq("id", history_id) \
                 .execute()
             print(f"[Supabase] 피드백 기록 완료: {history_id}")
             return True
         except Exception as e:
-            print(f"[Supabase Error] 피드백 저장 실패 (스키마 불일치일 수 있음): {e}")
+            print(f"[Supabase Error] 피드백 저장 실패: {e}")
+            return False
+
+    def get_feedbacks(self, status: str = 'pending') -> list:
+        """관리자용 피드백 목록 조회"""
+        try:
+            q = self.supabase.table('search_logs').select('*')
+            if status == 'pending':
+                q = q.eq('feedback', 'wrong_result')
+            elif status == 'resolved':
+                q = q.eq('feedback', 'resolved')
+            else:
+                q = q.in_('feedback', ['wrong_result', 'resolved'])
+
+            rows = q.order('created_at', desc=True).execute().data or []
+
+            # correct_event_id가 있으면 event 정보 조인
+            import json as _json
+            for row in rows:
+                row['parsed_comment'] = None
+                row['correct_event'] = None
+                try:
+                    if row.get('feedback_comment'):
+                        parsed = _json.loads(row['feedback_comment'])
+                        row['parsed_comment'] = parsed
+                        eid = parsed.get('correct_event_id')
+                        if eid:
+                            ev = self.supabase.table('event') \
+                                .select('id, short_summary, timestamp, situation, video_filename') \
+                                .eq('id', eid).limit(1).execute().data
+                            row['correct_event'] = ev[0] if ev else None
+                except Exception:
+                    pass
+            return rows
+        except Exception as e:
+            print(f"[Supabase Error] 피드백 목록 조회 실패: {e}")
+            return []
+
+    def resolve_feedback(self, feedback_id: int) -> bool:
+        """피드백 처리 완료 마크"""
+        try:
+            self.supabase.table('search_logs') \
+                .update({'feedback': 'resolved'}) \
+                .eq('id', feedback_id).execute()
+            return True
+        except Exception as e:
+            print(f"[Supabase Error] 피드백 처리 완료 실패: {e}")
+            return False
+
+    def boost_event_from_feedback(self, feedback_id: int) -> bool:
+        """정답 이벤트의 event_intents.info_sent에 피드백 쿼리를 추가해 검색 가중치 향상"""
+        import json as _json
+        try:
+            fb = self.supabase.table('search_logs') \
+                .select('*').eq('id', feedback_id).limit(1).execute().data
+            if not fb:
+                return False
+            fb = fb[0]
+
+            parsed = _json.loads(fb.get('feedback_comment') or '{}')
+            correct_event_id = parsed.get('correct_event_id')
+            query_text = fb.get('query', '')
+
+            if not correct_event_id:
+                return False
+
+            intents = self.supabase.table('event_intents') \
+                .select('id, info_sent') \
+                .eq('event_id', correct_event_id).limit(1).execute().data
+            if not intents:
+                return False
+
+            intent = intents[0]
+            updated = f"{intent.get('info_sent') or ''} | 검색어: {query_text}".strip(' |')
+            self.supabase.table('event_intents') \
+                .update({'info_sent': updated}) \
+                .eq('id', intent['id']).execute()
+
+            self.resolve_feedback(feedback_id)
+            return True
+        except Exception as e:
+            print(f"[Supabase Error] 피드백 적용 실패: {e}")
             return False
 
 # 싱글톤 패턴 (서버 내에서 한 번만 생성되도록)

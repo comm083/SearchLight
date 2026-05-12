@@ -1,6 +1,21 @@
 import React, { useState } from 'react';
 import { Clock } from 'lucide-react';
 
+const formatTs = (ts) => {
+  if (!ts) return '시간 정보 없음';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return ts;
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth() + 1;
+  const day = d.getUTCDate();
+  const h = d.getUTCHours();
+  const mi = String(d.getUTCMinutes()).padStart(2, '0');
+  const s = String(d.getUTCSeconds()).padStart(2, '0');
+  const ampm = h < 12 ? '오전' : '오후';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${y}. ${m}. ${day}. ${ampm} ${h12}:${mi}:${s}`;
+};
+
 const ResultCard = ({ res, resultKey, isExpanded, setExpandedResults }) => {
   const [showVideoModal, setShowVideoModal] = useState(false);
 
@@ -46,7 +61,7 @@ const ResultCard = ({ res, resultKey, isExpanded, setExpandedResults }) => {
         <div style={{flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between'}}>
           <div>
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px'}}>
-              <div style={{fontSize: '11px', color: '#3b82f6', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px'}}><Clock size={10} /> {res.timestamp ? new Date(res.timestamp).toLocaleString('ko-KR') : '시간 정보 없음'}</div>
+              <div style={{fontSize: '11px', color: '#3b82f6', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px'}}><Clock size={10} /> {formatTs(res.timestamp)}</div>
               <div style={{fontSize: '10px', color: '#6b7280'}}>{res.video_filename}</div>
             </div>
             {res.situation && res.situation !== 'normal' && (

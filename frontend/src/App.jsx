@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Plus, Search, Shield, Clock, Settings, User, MoreVertical, LogIn, LogOut, Mic, Square, X, Archive, BarChart2
+  Plus, Search, Shield, Clock, User, MoreVertical, LogIn, LogOut, Mic, Square, X, Archive, BarChart2, MessageSquare
 } from 'lucide-react';
 
 // Hooks
@@ -15,6 +15,7 @@ import EventHistory from './components/EventHistory';
 import Dashboard from './components/Dashboard';
 import PendingVideos from './components/PendingVideos';
 import LoginModal from './components/LoginModal';
+import FeedbackManager from './components/FeedbackManager';
 
 const App = () => {
   const { isLoggedIn, user, login, logout } = useAuth();
@@ -121,6 +122,15 @@ const App = () => {
           )}
         </button>
         <button className={`new-chat-btn ${currentView === 'dashboard' ? 'active' : ''}`} style={{ marginBottom: '10px', backgroundColor: currentView === 'dashboard' ? 'rgba(249, 115, 22, 0.2)' : 'rgba(249, 115, 22, 0.08)', color: '#fb923c', border: '1px solid rgba(249, 115, 22, 0.2)' }} onClick={() => setCurrentView('dashboard')}><BarChart2 size={18} /><span>통계 대시보드</span></button>
+        {user?.role === '관리자' && (
+          <button
+            className={`new-chat-btn ${currentView === 'feedback' ? 'active' : ''}`}
+            style={{ marginBottom: '8px', backgroundColor: currentView === 'feedback' ? 'rgba(139,92,246,0.2)' : 'rgba(139,92,246,0.08)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.2)' }}
+            onClick={() => setCurrentView('feedback')}
+          >
+            <MessageSquare size={18} /><span>피드백 관리</span>
+          </button>
+        )}
         <button className="new-chat-btn" onClick={() => { startNewChat(); setCurrentView('chat'); }}><Plus size={18} /><span>새 채팅</span></button>
         <div className="search-box">
           <Search className="search-icon" size={14} />
@@ -236,6 +246,8 @@ const App = () => {
           <PendingVideos />
         ) : currentView === 'dashboard' ? (
           <Dashboard />
+        ) : currentView === 'feedback' && user?.role === '관리자' ? (
+          <FeedbackManager />
         ) : (
           <>
             <div className="chat-container">

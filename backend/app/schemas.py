@@ -33,6 +33,3 @@ class HistoryResponse(BaseModel):
     status: str = "success"
     history: List[Dict[str, Any]]
 
-class AlertSimulationRequest(BaseModel):
-    description: str
-    image_path: Optional[str] = None
