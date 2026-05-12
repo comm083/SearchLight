@@ -2,6 +2,7 @@ import base64
 import json
 import re
 import os
+import sys
 import tempfile
 import random
 from datetime import datetime, timedelta
@@ -11,6 +12,12 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 import easyocr
 from ultralytics import YOLO, YOLOWorld
+
+# video_classifier 패키지 경로 등록 (backend/ 디렉토리)
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _BACKEND_DIR not in sys.path:
+    sys.path.insert(0, _BACKEND_DIR)
+_CLASSIFIER_CKPT = os.path.join(_BACKEND_DIR, 'video_classifier', 'checkpoints', 'best_model.pt')
 
 load_dotenv()
 
@@ -23,6 +30,24 @@ CROP_BUCKET    = "cctv-crops"
 
 # 랜덤 타임스탬프 생성 시 날짜 중복 방지용 추적 집합
 _used_random_dates: set = set()
+
+# ─────────────────────────────────────────────
+# VideoMAE 영상 분류기 (싱글턴)
+# ─────────────────────────────────────────────
+_video_classifier = None
+
+def get_video_classifier():
+    global _video_classifier
+    if _video_classifier is None:
+        if not os.path.exists(_CLASSIFIER_CKPT):
+            print(f"  [VideoClassifier] 모델 파일 없음 (건너뜀): {_CLASSIFIER_CKPT}")
+            return None
+        try:
+            from video_classifier.inference import VideoClassifier
+            _video_classifier = VideoClassifier(_CLASSIFIER_CKPT)
+        except Exception as e:
+            print(f"  [VideoClassifier] 로드 실패: {e}")
+    return _video_classifier
 
 def _generate_random_timestamp() -> str:
     """OCR 실패 시 현재 기준 1주일 이내 랜덤 타임스탬프 생성 (날짜 중복 없음)."""
@@ -530,7 +555,7 @@ def classify_situation(client: OpenAI, summary: str, detected_objects: list) -> 
         return None
 
 
-def analyze_frames(image_list: list, detected_objects: list) -> dict:
+def analyze_frames(image_list: list, detected_objects: list, model_classification: list | None = None) -> dict:
     if not api_key:
         raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
     client = OpenAI(api_key=api_key)
@@ -538,12 +563,31 @@ def analyze_frames(image_list: list, detected_objects: list) -> dict:
         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}}
         for img in image_list
     ]
-    
+
     # YOLO 탐지 결과가 있으면 GPT에게 컨텍스트로 제공
     prompt_text = ANALYSIS_PROMPT
     if detected_objects:
         obj_str = ", ".join(detected_objects)
         prompt_text += f"\n\n[추가 참고 정보]: 비전 AI 모델이 이 영상에서 다음 객체들을 감지했습니다: {obj_str}. 이 정보를 바탕으로 상황을 더욱 정확히 분석하세요."
+
+    # VideoMAE 모델 분류 결과가 있으면 GPT에게 전달
+    if model_classification:
+        from collections import Counter
+        valid = [r for r in model_classification if r and not r.get("low_confidence") and r["label"] != "normal"]
+        if valid:
+            labels = [r["label"] for r in valid]
+            top_label = Counter(labels).most_common(1)[0][0]
+            top_conf = max(r["confidence"] for r in valid if r["label"] == top_label)
+            label_ko = {
+                "falling": "낙상/쓰러짐", "break": "기물 파손", "assault": "폭행/폭력",
+                "smoking": "흡연", "disaster": "재난/화재", "theft": "절도/도난",
+                "normal": "일반 상황"
+            }.get(top_label, top_label)
+            prompt_text += (
+                f"\n\n[AI 모델 분류 결과]: 영상 분석 AI 모델이 이 영상 클립을 "
+                f"'{label_ko}({top_label})' 상황으로 분류했습니다 (신뢰도: {top_conf:.0%}). "
+                f"이 분류 결과를 인지하고, 해당 상황과 관련된 행동과 징후를 더욱 구체적으로 묘사하세요."
+            )
         
     contents.append({"type": "text", "text": prompt_text})
     response = client.chat.completions.create(
@@ -861,10 +905,28 @@ def process_video(video_path: str, model_type="world"):
     has_event = len(person_clips) > 0
     print(f"  분석 프레임: {len(frames)}장 | 이벤트: {'있음' if has_event else '없음'} | 시작 시각: {start_timestamp or 'NULL'}")
 
-    # GPT 분석
+    # VideoMAE 모델로 클립별 분류 (GPT 분석 전에 실행하여 결과를 프롬프트에 반영)
+    clip_model_results = []
+    if has_event:
+        classifier = get_video_classifier()
+        if classifier:
+            print(f"  VideoMAE 클립 분류 중... ({len(person_clips)}개)")
+            for s_sec, e_sec, clip_path in person_clips:
+                try:
+                    res = classifier.predict(clip_path)
+                    clip_model_results.append(res)
+                    flag = " [저신뢰도]" if res["low_confidence"] else ""
+                    print(f"    {s_sec:.0f}s~{e_sec:.0f}s → {res['label']} ({res['confidence']:.2f}){flag}")
+                except Exception as e:
+                    print(f"    [VideoMAE 실패] {e}")
+                    clip_model_results.append(None)
+        else:
+            clip_model_results = [None] * len(person_clips)
+
+    # GPT 분석 (VideoMAE 결과 포함)
     print(f"  GPT 분석 중... ({len(frames)}프레임 전송)")
     try:
-        video_info = analyze_frames(frames, detected_objects)
+        video_info = analyze_frames(frames, detected_objects, model_classification=clip_model_results or None)
     except Exception as e:
         print(f"  -> [GPT 실패] {type(e).__name__}: {e}")
         _save_processing_log(supabase, video_file, model_type, status="failed", error_message=f"GPT 실패: {e}",
@@ -891,7 +953,17 @@ def process_video(video_path: str, model_type="world"):
         # ── 이벤트 있음: event 행 하나 생성 → 클립은 event_clips에 저장 ──
         print("  상황 분류 중 (GPT)...")
         situation = classify_situation(client_obj, summary, detected_objects)
-        print(f"  -> 상황: {situation}")
+        print(f"  -> 상황 (GPT): {situation}")
+
+        # GPT가 normal로 분류했지만 모델이 이상 감지 시 보정
+        confident = [r["label"] for r in clip_model_results if r and not r["low_confidence"] and r["label"] != "normal"]
+        if confident and (situation is None or situation == "normal"):
+            from collections import Counter
+            corrected = Counter(confident).most_common(1)[0][0]
+            print(f"  [VideoMAE 보정] {situation} → {corrected}")
+            situation = corrected
+
+        print(f"  -> 최종 상황: {situation}")
 
         print("  의도별 문장 생성 중 (GPT)...")
         intent_sentences = generate_intent_sentences(client_obj, summary)
@@ -915,16 +987,33 @@ def process_video(video_path: str, model_type="world"):
         event_id = result.data[0]['id']
         print(f"  -> event 저장 완료 (id: {event_id}, 클립 수: {len(person_clips)})")
 
+        # VideoMAE 모델 분류 결과 집계
+        valid_model = [r for r in clip_model_results if r and not r.get("low_confidence") and r["label"] != "normal"]
+        if valid_model:
+            from collections import Counter
+            _top = Counter(r["label"] for r in valid_model).most_common(1)[0][0]
+            model_label = _top
+            model_confidence = round(max(r["confidence"] for r in valid_model if r["label"] == _top), 4)
+        elif any(r for r in clip_model_results if r):
+            _best = max((r for r in clip_model_results if r), key=lambda r: r["confidence"])
+            model_label = _best["label"]
+            model_confidence = round(_best["confidence"], 4)
+        else:
+            model_label = None
+            model_confidence = None
+
         try:
             supabase.table('event_intents').insert({
-                "event_id":    event_id,
-                "time_sent":   intent_sentences.get("time_sent", ""),
-                "count_sent":  intent_sentences.get("count_sent", ""),
-                "action_sent": intent_sentences.get("action_sent", ""),
-                "info_sent":   intent_sentences.get("info_sent", ""),
-                "error_sent":  intent_sentences.get("error_sent", ""),
+                "event_id":         event_id,
+                "time_sent":        intent_sentences.get("time_sent", ""),
+                "count_sent":       intent_sentences.get("count_sent", ""),
+                "action_sent":      intent_sentences.get("action_sent", ""),
+                "info_sent":        intent_sentences.get("info_sent", ""),
+                "error_sent":       intent_sentences.get("error_sent", ""),
+                "model_label":      model_label,
+                "model_confidence": model_confidence,
             }).execute()
-            print(f"  -> event_intents 저장 완료")
+            print(f"  -> event_intents 저장 완료 (model: {model_label}, {model_confidence})")
         except Exception as e:
             print(f"  -> [event_intents 저장 실패] {e}")
 
