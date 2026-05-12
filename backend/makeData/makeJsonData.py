@@ -442,6 +442,8 @@ ANALYSIS_PROMPT = """
 - 물건이나 기물의 상태 변화(파손·전도·이동 등)
 - 이상 징후 여부 및 위험도 판단
 
+주의: "이상 징후가 없음", "특이 사항이 없음", "폭력이나 절도 등의 이상 징후는 없음" 등 부정적 결론 문장은 작성하지 마세요. 실제로 관찰된 사실만 기술하세요.
+
 출력 형식 (JSON만 출력):
 {
   "summary": "등장 인물 외형·행동·이상 징후를 상세히 기술한 전체 보고서",
@@ -546,7 +548,10 @@ def analyze_frames(image_list: list, detected_objects: list) -> dict:
     contents.append({"type": "text", "text": prompt_text})
     response = client.chat.completions.create(
         model='gpt-4o',
-        messages=[{"role": "user", "content": contents}],
+        messages=[
+            {"role": "system", "content": "당신은 무인 편의점 보안 모니터링 시스템의 AI 분석관입니다. CCTV 프레임을 분석하여 보안 담당자에게 객관적인 상황 보고서를 제공하는 것이 임무입니다. 폭행, 절도, 흡연, 낙상 등 모든 이상 행동을 감지하고 전문적으로 기술해야 합니다."},
+            {"role": "user", "content": contents}
+        ],
         timeout=120,
     )
     raw = response.choices[0].message.content.strip()
@@ -885,7 +890,7 @@ def process_video(video_path: str, model_type="world"):
     else:
         # ── 이벤트 있음: event 행 하나 생성 → 클립은 event_clips에 저장 ──
         print("  상황 분류 중 (GPT)...")
-        situation = classify_situation(client_obj, summary, detected_objects) or "normal"
+        situation = classify_situation(client_obj, summary, detected_objects)
         print(f"  -> 상황: {situation}")
 
         print("  의도별 문장 생성 중 (GPT)...")
