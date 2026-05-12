@@ -61,6 +61,9 @@ class SearchManager:
         # 5. 특징 추출 및 맥락 유지
         query, context_used = self._apply_feature_context(query, has_pronoun, memory, context_used)
 
+        # 5-1. 이전 검색 결과 기반 지칭어 처리 ("그 사람", "거기" 등)
+        query, context_used = self._apply_result_context(query, has_pronoun, memory, context_used)
+
         # 6. 의도별 검색 및 보고서 생성
         response_data = self._init_response(current_intent, intent_result, time_info, context_used)
 
@@ -71,10 +74,12 @@ class SearchManager:
         else:
             response_data["nearest_event"] = None
 
+        conversation_history = memory.get("conversation_history", [])
+
         if current_intent == "LOCALIZATION":
             response_data = self._handle_localization(query, response_data)
         elif current_intent in ("SUMMARIZATION", "BEHAVIORAL", "CAUSAL", "COUNTING", "GENERAL"):
-            response_data = self._handle_vector_search(query, top_k, time_info, current_intent, response_data)
+            response_data = self._handle_vector_search(query, top_k, time_info, current_intent, response_data, conversation_history)
 
         # 7. 세션 및 DB 업데이트
         self._finalize(session_id, current_intent, time_info, query, response_data)
@@ -123,6 +128,20 @@ class SearchManager:
                 "raw": parsed_time.raw_expression
             }
         return {"start_time": None, "end_time": None, "raw": "전체"}
+
+    def _apply_result_context(self, query: str, has_pronoun: bool, memory: Dict, context_used: bool) -> tuple:
+        """이전 검색 결과를 바탕으로 지칭어('그 사람', '거기' 등)를 구체적 맥락으로 치환"""
+        if not has_pronoun:
+            return query, context_used
+        last_results = memory.get("last_results", [])
+        if not last_results:
+            return query, context_used
+        subject_desc = last_results[0].get("description", "")
+        if subject_desc and subject_desc[:80] not in query:
+            query = f"[이전 검색 대상: {subject_desc[:150]}] {query}"
+            context_used = True
+            print(f"[Context] 이전 결과 컨텍스트 주입: {subject_desc[:60]}...")
+        return query, context_used
 
     def _apply_feature_context(self, query: str, has_pronoun: bool, memory: Dict, context_used: bool) -> tuple:
         current_features = [kw for kw in self.feature_keywords if kw in query]
@@ -184,14 +203,14 @@ class SearchManager:
             )
         return response
 
-    def _handle_vector_search(self, query: str, top_k: int, time_info: Dict, intent: str, response: Dict) -> Dict:
+    def _handle_vector_search(self, query: str, top_k: int, time_info: Dict, intent: str, response: Dict, conversation_history: list = None) -> Dict:
         search_results = vector_db_service.search(
-            query=query, 
+            query=query,
             top_k=top_k,
             start_time=time_info.get("start_time"),
             end_time=time_info.get("end_time")
         )
-        
+
         is_fallback = False
         if not search_results and any(kw in query for kw in ["방금", "최근", "지금", "어떤일"]):
             search_results = vector_db_service.search(query=query, top_k=top_k)
@@ -204,7 +223,8 @@ class SearchManager:
                 query=query, contexts=search_results, intent=intent,
                 is_fallback=is_fallback, requested_time=time_info.get("raw", "전체 시간"),
                 start_time=time_info.get("start_time"),
-                end_time=time_info.get("end_time")
+                end_time=time_info.get("end_time"),
+                conversation_history=conversation_history,
             )
         else:
             time_hint = f" ({time_info.get('raw', '')} 기준)" if time_info.get("raw") and time_info.get("raw") != "전체" else ""
@@ -225,12 +245,18 @@ class SearchManager:
             last_time=time_info,
             last_query=query
         )
+        results = response.get("results") or []
+        if results:
+            session_manager.update_last_results(session_id, results)
+        report = response.get("ai_report") or response.get("answer") or ""
+        if report and intent != "CHITCHAT":
+            session_manager.add_conversation_turn(session_id, query, report)
         db_service.log_search(
             query=query,
             intent=intent,
             session_id=session_id,
-            ai_report=response.get("ai_report") or response.get("answer"),
-            results=response.get("results") or []
+            ai_report=report,
+            results=results
         )
 
 search_manager = SearchManager()
