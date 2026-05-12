@@ -1,9 +1,7 @@
 import os
 import sys
-import json
 from openai import OpenAI
 from app.core.config import settings
-from app.core.constants import KEYWORDS
 
 # 프로젝트 루트를 경로에 추가 (ai 모듈 접근용)
 _project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
@@ -60,7 +58,7 @@ class NLPService:
 
         print("[Service] OpenAI NLP 서비스 초기화 완료!")
 
-    def generate_security_report(self, query: str, contexts: list, intent: str = "SUMMARIZATION", is_fallback: bool = False, requested_time: str = "알 수 없는 시간", mode: str = "summary", start_time: str = None, end_time: str = None):
+    def generate_security_report(self, query: str, contexts: list, intent: str = "SUMMARIZATION", is_fallback: bool = False, requested_time: str = "알 수 없는 시간", mode: str = "summary", start_time: str = None, end_time: str = None, conversation_history: list = None):
         """검색된 장면들을 바탕으로 자연어 보안 보고서를 생성합니다."""
         if not self.client:
             return "AI 보고서 기능이 비활성화 상태입니다. (OpenAI API 키 필요)"
@@ -90,7 +88,7 @@ class NLPService:
 {self._get_writing_guidelines(mode)}
 """
         try:
-            report = self._call_llm(system_prompt, user_prompt)
+            report = self._call_llm(system_prompt, user_prompt, history=conversation_history)
             is_valid, corrected_report = self._verify_report(report, requested_time, context_text)
             
             if not is_valid:
@@ -178,15 +176,16 @@ class NLPService:
 5. [핵심] 제공된 [실제 데이터]에 질문에 대한 답변 정보가 전혀 없다면 절대 상상해서 지어내지 말고, '요청하신 정보와 관련된 기록이 없습니다'라고 명확히 답변할 것.
 6. 맺음말 절대 금지."""
 
-    def _call_llm(self, system_prompt: str, user_content: str) -> str:
-        """LLM 호출 공통 로직"""
+    def _call_llm(self, system_prompt: str, user_content: str, history: list = None) -> str:
+        """LLM 호출 공통 로직 — history가 있으면 다중 턴 컨텍스트로 주입"""
+        messages = [{"role": "system", "content": system_prompt}]
+        if history:
+            messages.extend(history[-6:])  # 최근 3턴만 포함 (토큰 절약)
+        messages.append({"role": "user", "content": user_content})
         response = self.client.chat.completions.create(
             model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
-            ],
-            temperature=0.2, # 낮은 온도로 일관성 유지
+            messages=messages,
+            temperature=0.2,
         )
         return response.choices[0].message.content
 

@@ -26,7 +26,6 @@ from dataclasses import dataclass, field
 from typing import Optional
 import re
 import os
-import math
 
 
 # ─── 결과 데이터 클래스 ──────────────────────────────────────────────
@@ -370,108 +369,6 @@ class FineTunedIntentClassifier:
         except Exception as e:
             print(f"[Error] AI 추론 중 오류 발생: {e}")
             return self.fallback_clf.classify(query)
-
-
-# ─────────────────────────────────────────────────────────────────────
-# 방식 B: KoELECTRA 파인튜닝 코드 (설치 후 실행)
-# ─────────────────────────────────────────────────────────────────────
-KOELECTRA_TRAIN_CODE = '''
-# ─── 파인튜닝 실행 코드 (torch + transformers 설치 필요) ────────────
-
-from transformers import (AutoTokenizer, AutoModelForSequenceClassification,
-                           Trainer, TrainingArguments)
-from torch.utils.data import Dataset
-import torch, json
-
-MODEL_NAME = "monologg/koelectra-base-v3-discriminator"
-LABELS = ["COUNTING", "SUMMARIZATION", "LOCALIZATION", "BEHAVIORAL", "CAUSAL"]
-LABEL2ID = {l: i for i, l in enumerate(LABELS)}
-
-# ── 데이터셋 클래스 ─────────────────────────────────────────────────
-class IntentDataset(Dataset):
-    def __init__(self, data, tokenizer, max_len=128):
-        self.encodings = tokenizer(
-            [d["query"] for d in data],
-            truncation=True, padding=True, max_length=max_len,
-            return_tensors="pt"
-        )
-        self.labels = torch.tensor([LABEL2ID[d["intent"]] for d in data])
-
-    def __len__(self):  return len(self.labels)
-    def __getitem__(self, i):
-        return {k: v[i] for k, v in self.encodings.items()} | \
-               {"labels": self.labels[i]}
-
-# ── 학습 데이터 예시 (300건 이상 권장) ─────────────────────────────
-train_data = [
-    {"query": "오늘 몇 명 왔어?",          "intent": "COUNTING"},
-    {"query": "이번 주 차량 대수 알려줘",   "intent": "COUNTING"},
-    {"query": "오전에 총 몇 번 감지됐어?",  "intent": "COUNTING"},
-    {"query": "방문객 집계 해줘",           "intent": "COUNTING"},
-
-    {"query": "어제 오후에 무슨 일 있었어?","intent": "SUMMARIZATION"},
-    {"query": "교대 시간대 정리해줘",       "intent": "SUMMARIZATION"},
-    {"query": "오전 상황 요약해줘",         "intent": "SUMMARIZATION"},
-    {"query": "지난 1시간 보고해줘",        "intent": "SUMMARIZATION"},
-
-    {"query": "지금 정문에 사람 있어?",     "intent": "LOCALIZATION"},
-    {"query": "현재 A구역 상황은?",         "intent": "LOCALIZATION"},
-    {"query": "주차장에 차 있나?",          "intent": "LOCALIZATION"},
-    {"query": "지금 당장 어디 있어?",       "intent": "LOCALIZATION"},
-
-    {"query": "수상한 사람 없었어?",        "intent": "BEHAVIORAL"},
-    {"query": "이상한 행동 감지됐어?",      "intent": "BEHAVIORAL"},
-    {"query": "담 넘는 사람 있었나?",       "intent": "BEHAVIORAL"},
-    {"query": "배회하는 거 없었어?",        "intent": "BEHAVIORAL"},
-
-    {"query": "왜 알림이 울렸어?",          "intent": "CAUSAL"},
-    {"query": "그 사고 어떻게 생긴 거야?",  "intent": "CAUSAL"},
-    {"query": "어쩌다 그렇게 됐어?",        "intent": "CAUSAL"},
-    {"query": "경위를 설명해줘",            "intent": "CAUSAL"},
-    # ... 총 300건 이상 작성
-]
-
-# ── 학습 실행 ───────────────────────────────────────────────────────
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-model = AutoModelForSequenceClassification.from_pretrained(
-    MODEL_NAME, num_labels=len(LABELS)
-)
-
-split = int(len(train_data) * 0.8)
-train_ds = IntentDataset(train_data[:split], tokenizer)
-val_ds   = IntentDataset(train_data[split:], tokenizer)
-
-args = TrainingArguments(
-    output_dir="./intent_model",
-    num_train_epochs=5,
-    per_device_train_batch_size=16,
-    per_device_eval_batch_size=32,
-    eval_strategy="epoch",
-    save_strategy="best",
-    load_best_model_at_end=True,
-    metric_for_best_model="eval_loss",
-    logging_steps=10,
-)
-Trainer(model=model, args=args,
-        train_dataset=train_ds, eval_dataset=val_ds).train()
-model.save_pretrained("./intent_model_final")
-tokenizer.save_pretrained("./intent_model_final")
-print("학습 완료! ./intent_model_final 에 저장됨")
-
-# ── 추론 ────────────────────────────────────────────────────────────
-def classify_with_koelectra(query: str) -> dict:
-    model.eval()
-    inputs = tokenizer(query, return_tensors="pt", truncation=True)
-    with torch.no_grad():
-        logits = model(**inputs).logits
-    probs  = torch.softmax(logits, dim=-1)[0]
-    pred   = torch.argmax(probs).item()
-    return {
-        "intent":     LABELS[pred],
-        "confidence": probs[pred].item(),
-        "scores":     {l: probs[i].item() for i, l in enumerate(LABELS)},
-    }
-'''
 
 
 
