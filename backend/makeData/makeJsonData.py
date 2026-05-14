@@ -270,7 +270,7 @@ def _detect_target_yolo(frame, model_type="world") -> tuple:
     return list(detected_classes), person_count, results
 
 
-def encode_video_and_extract_clips(video_path: str, model_type="world"):
+def encode_video_and_extract_clips(video_path: str, model_type="world", progress_cb=None):
     """
     Returns:
         base64frames (list[str])  : GPT 분석용 base64 프레임
@@ -301,11 +301,22 @@ def encode_video_and_extract_clips(video_path: str, model_type="world"):
     _crop_class_counts = {}    # 클래스별 수집 개수 제한 (클래스당 최대 3개)
     MAX_CROPS_PER_CLASS = 3
     cur = 0
+    _last_reported_pct = [-1]
+
+    def _report_frame(cur_frame):
+        if progress_cb is None:
+            return
+        pct = 5 + int((cur_frame / total_frames) * 30)  # 5% → 35%
+        if pct != _last_reported_pct[0]:
+            _last_reported_pct[0] = pct
+            progress_cb(pct, "객체 감지 중")
 
     while video.isOpened():
         success, frame = video.read()
         if not success:
             break
+
+        _report_frame(cur)
 
         if cur % interval_motion == 0:
             # YOLO를 이용해 특정 객체 감지
@@ -405,7 +416,11 @@ def encode_video_and_extract_clips(video_path: str, model_type="world"):
         max_clip_frames = int(fps * MAX_CLIP_SEC)
         clip_counter = 0
 
+        n_groups = len(groups)
         for i, (s_frame, e_frame) in enumerate(groups):
+            if progress_cb:
+                pct = 35 + int((i / n_groups) * 5)  # 35% → 40%
+                progress_cb(pct, "클립 추출 중")
             s_frame = max(0, s_frame - int(fps * 2))
             e_frame = min(total_frames - 1, e_frame + int(fps * 2))
 
@@ -868,13 +883,18 @@ def _save_processing_log(supabase, video_file: str, model_type: str, status: str
 # ─────────────────────────────────────────────
 # 단일 영상 처리
 # ─────────────────────────────────────────────
-def process_video(video_path: str, model_type="world"):
+def process_video(video_path: str, model_type="world", progress_cb=None):
     import time
     t_start = time.time()
+
+    def report(pct: int, step: str):
+        if progress_cb:
+            progress_cb(pct, step)
 
     supabase = get_supabase_client()
     video_file = os.path.basename(video_path)
     print(f"\n[처리] {video_file} (모델: {model_type})")
+    report(2, "분석 시작")
 
     # 중복 처리 방지: event 또는 normal 테이블에 이미 존재하면 스킵
     already_in_event  = supabase.table('event').select('id').eq('video_filename', video_file).limit(1).execute()
@@ -885,8 +905,9 @@ def process_video(video_path: str, model_type="world"):
         return
 
     # 프레임 추출 + 클립 추출 + 타임스탬프 OCR + 크롭 후보
+    report(5, "프레임 추출 중")
     try:
-        frames, person_clips, start_timestamp, detected_objects, max_person_count, crop_candidates = encode_video_and_extract_clips(video_path, model_type=model_type)
+        frames, person_clips, start_timestamp, detected_objects, max_person_count, crop_candidates = encode_video_and_extract_clips(video_path, model_type=model_type, progress_cb=progress_cb)
     except Exception as e:
         print(f"  -> [프레임 추출 실패] {e}")
         _save_processing_log(supabase, video_file, model_type, status="failed", error_message=str(e),
@@ -904,6 +925,7 @@ def process_video(video_path: str, model_type="world"):
 
     has_event = len(person_clips) > 0
     print(f"  분석 프레임: {len(frames)}장 | 이벤트: {'있음' if has_event else '없음'} | 시작 시각: {start_timestamp or 'NULL'}")
+    report(42, "영상 분류 중")
 
     # VideoMAE 모델로 클립별 분류 (GPT 분석 전에 실행하여 결과를 프롬프트에 반영)
     clip_model_results = []
@@ -924,6 +946,7 @@ def process_video(video_path: str, model_type="world"):
             clip_model_results = [None] * len(person_clips)
 
     # GPT 분석 (VideoMAE 결과 포함)
+    report(55, "GPT 분석 중")
     print(f"  GPT 분석 중... ({len(frames)}프레임 전송)")
     try:
         video_info = analyze_frames(frames, detected_objects, model_classification=clip_model_results or None)
@@ -951,20 +974,34 @@ def process_video(video_path: str, model_type="world"):
                              duration_sec=round(time.time() - t_start, 1))
     else:
         # ── 이벤트 있음: event 행 하나 생성 → 클립은 event_clips에 저장 ──
+        report(72, "상황 분류 중")
         print("  상황 분류 중 (GPT)...")
-        situation = classify_situation(client_obj, summary, detected_objects)
-        print(f"  -> 상황 (GPT): {situation}")
+        gpt_situation_raw = classify_situation(client_obj, summary, detected_objects)
+        print(f"  -> 상황 (GPT): {gpt_situation_raw}")
 
-        # GPT가 normal로 분류했지만 모델이 이상 감지 시 보정
+        # VideoMAE 모델 지배 레이블 집계
+        from collections import Counter
         confident = [r["label"] for r in clip_model_results if r and not r["low_confidence"] and r["label"] != "normal"]
-        if confident and (situation is None or situation == "normal"):
-            from collections import Counter
-            corrected = Counter(confident).most_common(1)[0][0]
-            print(f"  [VideoMAE 보정] {situation} → {corrected}")
-            situation = corrected
+        model_situation_raw = Counter(confident).most_common(1)[0][0] if confident else None
+
+        # 충돌 감지: 둘 다 유효한데 서로 다른 경우
+        VALID_SITUATIONS = {'falling', 'break', 'assault', 'theft', 'smoking', 'disaster'}
+        gpt_valid   = gpt_situation_raw in VALID_SITUATIONS
+        model_valid = model_situation_raw in VALID_SITUATIONS
+        is_conflict = gpt_valid and model_valid and gpt_situation_raw != model_situation_raw
+
+        if is_conflict:
+            situation = gpt_situation_raw  # GPT가 추천 (더 많은 컨텍스트)
+            print(f"  [분류 충돌] GPT={gpt_situation_raw}, 모델={model_situation_raw} → 추천={situation} (처리대기로 전송)")
+        elif model_valid and not gpt_valid:
+            situation = model_situation_raw
+            print(f"  [VideoMAE 보정] {gpt_situation_raw} → {situation}")
+        else:
+            situation = gpt_situation_raw
 
         print(f"  -> 최종 상황: {situation}")
 
+        report(78, "의도 생성 중")
         print("  의도별 문장 생성 중 (GPT)...")
         intent_sentences = generate_intent_sentences(client_obj, summary)
 
@@ -975,16 +1012,20 @@ def process_video(video_path: str, model_type="world"):
         else:
             event_timestamp = None
 
-        # event 행 하나 생성
+        # event 행 하나 생성 (timestamp는 OCR 결과 그대로, 충돌 여부는 is_conflict 컬럼으로 관리)
         result = supabase.table('event').insert({
-            "video_filename": video_file,
-            "timestamp":      event_timestamp,
-            "summary":        summary,
-            "short_summary":  short_summary,
-            "count_people":   max_person_count,
-            "situation":      situation,
+            "video_filename":  video_file,
+            "timestamp":       event_timestamp,
+            "summary":         summary,
+            "short_summary":   short_summary,
+            "count_people":    max_person_count,
+            "situation":       situation,
+            "gpt_situation":   gpt_situation_raw,
+            "model_situation": model_situation_raw,
+            "is_conflict":     is_conflict,
         }).execute()
         event_id = result.data[0]['id']
+        report(85, "클립 업로드 중")
         print(f"  -> event 저장 완료 (id: {event_id}, 클립 수: {len(person_clips)})")
 
         # VideoMAE 모델 분류 결과 집계
@@ -1044,6 +1085,7 @@ def process_video(video_path: str, model_type="world"):
 
         # 크롭 객체 CLIP 임베딩 저장
         if crop_candidates:
+            report(93, "크롭 임베딩 저장 중")
             print(f"  크롭 객체 CLIP 임베딩 저장 중... ({len(crop_candidates)}개)")
             save_crops_to_db(supabase, event_id, video_file, start_timestamp, crop_candidates)
 

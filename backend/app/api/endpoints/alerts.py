@@ -1,10 +1,15 @@
-from fastapi import APIRouter
+import os, sys, uuid, time, threading, tempfile
+from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel
+from typing import List
 
 router = APIRouter()
 
 class TimestampUpdate(BaseModel):
     timestamp: str
+
+class SituationUpdate(BaseModel):
+    situation: str
 
 @router.get("/events")
 async def get_all_events(limit: int = 300):
@@ -36,6 +41,77 @@ async def fix_timestamps():
     if result.get("status") == "success":
         vector_db_service.reload()
     return result
+
+@router.patch("/events/{event_id}/situation")
+async def resolve_event_conflict(event_id: str, body: SituationUpdate):
+    """분류 충돌 이벤트의 상황을 사용자가 확정하고 처리대기에서 제거"""
+    from app.services.database import db_service
+    from app.services.vector_db_service import vector_db_service
+    ok = db_service.resolve_event_conflict(event_id, body.situation)
+    if ok:
+        vector_db_service.reload()
+        return {"status": "success", "message": f"이벤트 {event_id} 상황 확정 완료"}
+    return {"status": "error", "message": "처리 실패"}
+
+@router.post("/analyze")
+async def start_analyze(files: List[UploadFile] = File(...)):
+    """영상 파일을 받아 백그라운드에서 분석 시작, job_id 목록 반환"""
+    from app.services.job_manager import create_job, update_job
+
+    _BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+    jobs_out = []
+    for file in files:
+        job_id  = str(uuid.uuid4())
+        suffix  = os.path.splitext(file.filename or "video")[-1] or ".mp4"
+        content = await file.read()
+
+        # 임시 파일에 저장 (원본 파일명 유지)
+        tmp_dir  = tempfile.mkdtemp()
+        tmp_path = os.path.join(tmp_dir, file.filename or f"upload{suffix}")
+        with open(tmp_path, "wb") as f:
+            f.write(content)
+
+        create_job(job_id, file.filename or "unknown")
+        jobs_out.append({"job_id": job_id, "filename": file.filename})
+
+        def _run(jid=job_id, path=tmp_path, tdir=tmp_dir):
+            import shutil, importlib.util
+            from app.services.job_manager import analysis_semaphore
+            update_job(jid, status="pending", step="대기 중 (이전 영상 분석 완료 후 시작)")
+            analysis_semaphore.acquire()
+            try:
+                update_job(jid, status="running", start_time=time.time())
+                spec = importlib.util.spec_from_file_location(
+                    "makeJsonData",
+                    os.path.join(_BACKEND, "makeData", "makeJsonData.py"),
+                )
+                mod = importlib.util.module_from_spec(spec)
+                if mod.__name__ not in sys.modules:
+                    sys.modules[mod.__name__] = mod
+                    spec.loader.exec_module(mod)
+                else:
+                    mod = sys.modules[mod.__name__]
+                mod.process_video(path, model_type="v8",
+                                  progress_cb=lambda pct, step: update_job(jid, pct=pct, step=step))
+                update_job(jid, status="done", pct=100, step="완료")
+            except Exception as e:
+                update_job(jid, status="error", step=str(e)[:120])
+            finally:
+                analysis_semaphore.release()
+                shutil.rmtree(tdir, ignore_errors=True)
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    return {"jobs": jobs_out}
+
+
+@router.get("/analyze/status")
+async def get_analyze_status(job_ids: str):
+    """job_id 쉼표 목록으로 각 작업의 진행 상태 반환"""
+    from app.services.job_manager import get_jobs
+    return get_jobs(job_ids.split(","))
+
 
 @router.delete("/events/{event_id}")
 async def delete_event(event_id: str):
