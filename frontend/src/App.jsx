@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Plus, Search, Shield, Clock, User, MoreVertical, LogIn, LogOut, Mic, Square, X, Archive, BarChart2, MessageSquare
+  Plus, Search, Shield, Clock, User, MoreVertical, LogIn, LogOut, Mic, Square, X, Archive, BarChart2, MessageSquare, Video
 } from 'lucide-react';
 
 // Hooks
@@ -16,6 +16,7 @@ import Dashboard from './components/Dashboard';
 import PendingVideos from './components/PendingVideos';
 import LoginModal from './components/LoginModal';
 import FeedbackManager from './components/FeedbackManager';
+import VideoAnalysis from './components/VideoAnalysis';
 
 const App = () => {
   const { isLoggedIn, user, login, logout } = useAuth();
@@ -107,6 +108,7 @@ const App = () => {
     <div className="app-container">
       {/* Sidebar - Simplified for refactoring */}
       <aside className="sidebar" style={{ width: `${sidebarWidth}px`, flexShrink: 0 }}>
+        <button className={`new-chat-btn ${currentView === 'analysis' ? 'active' : ''}`} style={{ marginBottom: '8px', backgroundColor: currentView === 'analysis' ? 'rgba(168,85,247,0.2)' : 'rgba(168,85,247,0.08)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.2)' }} onClick={() => setCurrentView('analysis')}><Video size={18} /><span>영상 분석</span></button>
         <button className={`new-chat-btn ${currentView === 'archive' ? 'active' : ''}`} style={{ marginBottom: '8px', backgroundColor: currentView === 'archive' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }} onClick={() => setCurrentView('archive')}><Archive size={18} /><span>영상 보관함</span></button>
         <button
           className={`new-chat-btn ${currentView === 'pending' ? 'active' : ''}`}
@@ -240,7 +242,9 @@ const App = () => {
           </div>
         </header>
 
-        {currentView === 'archive' ? (
+        {currentView === 'analysis' ? (
+          <VideoAnalysis />
+        ) : currentView === 'archive' ? (
           <EventHistory user={user} />
         ) : currentView === 'pending' ? (
           <PendingVideos />
