@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, MapPin, AlertTriangle, MoreVertical, Pencil, Trash2, ChevronLeft, ChevronRight, Check, X } from 'lucide-react';
+import { Play, MapPin, AlertTriangle, MoreVertical, Pencil, Trash2, ChevronLeft, ChevronRight, Check, X, GitCompare } from 'lucide-react';
+
+const SITUATION_LABELS = {
+  falling: '낙상', break: '기물파손', assault: '폭행',
+  theft: '절도', smoking: '흡연', disaster: '재난',
+};
+const SITUATION_KEYS = Object.keys(SITUATION_LABELS);
 
 const PendingVideos = () => {
   const [events, setEvents] = useState([]);
@@ -9,6 +15,8 @@ const PendingVideos = () => {
   const [openMenuId, setOpenMenuId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState('');
+  const [conflictEditId, setConflictEditId] = useState(null);
+  const [conflictSituation, setConflictSituation] = useState('');
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -75,6 +83,31 @@ const PendingVideos = () => {
     }
   };
 
+  const startConflictEdit = (event) => {
+    setOpenMenuId(null);
+    setConflictEditId(event.id);
+    setConflictSituation(event.conflict?.recommended || event.tag || '');
+  };
+
+  const submitConflict = async (eventId) => {
+    if (!conflictSituation) return;
+    try {
+      const res = await fetch(`http://localhost:8000/api/alerts/events/${eventId}/situation`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ situation: conflictSituation }),
+      });
+      if (res.ok) {
+        setEvents(prev => prev.filter(e => e.id !== eventId));
+        setConflictEditId(null);
+      } else {
+        alert('업데이트 실패');
+      }
+    } catch {
+      alert('네트워크 오류');
+    }
+  };
+
   const goClip = (eventId, dir, totalClips, e) => {
     e.stopPropagation();
     setClipIndices(prev => ({
@@ -89,7 +122,7 @@ const PendingVideos = () => {
         <div style={{ marginBottom: '24px' }}>
           <h1 style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 8px 0', color: '#fff' }}>처리대기 영상</h1>
           <p style={{ color: '#9ca3af', margin: 0, fontSize: '14px' }}>
-            타임스탬프가 인식되지 않은 영상입니다. 직접 시각을 입력하거나 삭제할 수 있습니다.
+            타임스탬프가 미인식되었거나 모델·GPT 분류가 충돌한 영상입니다. 직접 확인 후 처리하세요.
           </p>
         </div>
 
@@ -112,6 +145,8 @@ const PendingVideos = () => {
               const isAbnormal = event.tag && event.tag !== 'normal';
               const isEditing = editingId === event.id;
               const isMenuOpen = openMenuId === event.id;
+              const isConflict = !!event.conflict;
+              const isConflictEditing = conflictEditId === event.id;
 
               return (
                 <div key={event.id} style={{ backgroundColor: '#1e293b', borderRadius: '12px', overflow: 'visible', display: 'flex', flexDirection: 'row', border: '1px solid #334155', position: 'relative' }}>
@@ -150,9 +185,71 @@ const PendingVideos = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>
                       <MapPin size={14} /> {event.location}
                     </div>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: 'rgba(234,179,8,0.12)', border: '1px solid rgba(234,179,8,0.3)', color: '#fbbf24', fontSize: '12px', fontWeight: '600', padding: '3px 10px', borderRadius: '20px', alignSelf: 'flex-start', marginBottom: 'auto' }}>
-                      타임스탬프 미인식
-                    </div>
+                    {isConflict ? (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc', fontSize: '12px', fontWeight: '600', padding: '3px 10px', borderRadius: '20px', alignSelf: 'flex-start' }}>
+                        <GitCompare size={11} /> 분류 충돌
+                      </div>
+                    ) : (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: 'rgba(234,179,8,0.12)', border: '1px solid rgba(234,179,8,0.3)', color: '#fbbf24', fontSize: '12px', fontWeight: '600', padding: '3px 10px', borderRadius: '20px', alignSelf: 'flex-start' }}>
+                        타임스탬프 미인식
+                      </div>
+                    )}
+
+                    {/* 분류 충돌 정보 및 해소 UI */}
+                    {isConflict && (
+                      <div style={{ marginTop: '12px', padding: '12px', backgroundColor: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.2)', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', gap: '12px', fontSize: '12px' }}>
+                          <span style={{ color: '#9ca3af' }}>모델:&nbsp;
+                            <span style={{ color: '#f87171', fontWeight: '600' }}>
+                              {SITUATION_LABELS[event.conflict.model_situation] || event.conflict.model_situation || '-'}
+                            </span>
+                          </span>
+                          <span style={{ color: '#4b5563' }}>|</span>
+                          <span style={{ color: '#9ca3af' }}>GPT:&nbsp;
+                            <span style={{ color: '#60a5fa', fontWeight: '600' }}>
+                              {SITUATION_LABELS[event.conflict.gpt_situation] || event.conflict.gpt_situation || '-'}
+                            </span>
+                          </span>
+                          <span style={{ color: '#4b5563' }}>|</span>
+                          <span style={{ color: '#9ca3af' }}>추천:&nbsp;
+                            <span style={{ color: '#4ade80', fontWeight: '600' }}>
+                              {SITUATION_LABELS[event.conflict.recommended] || event.conflict.recommended || '-'}
+                            </span>
+                          </span>
+                        </div>
+                        {isConflictEditing && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                            {SITUATION_KEYS.map(key => (
+                              <button
+                                key={key}
+                                onClick={() => setConflictSituation(key)}
+                                style={{
+                                  padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', border: '1px solid',
+                                  backgroundColor: conflictSituation === key ? 'rgba(59,130,246,0.2)' : 'transparent',
+                                  borderColor: conflictSituation === key ? '#3b82f6' : '#334155',
+                                  color: conflictSituation === key ? '#60a5fa' : '#6b7280',
+                                }}
+                              >
+                                {SITUATION_LABELS[key]}
+                              </button>
+                            ))}
+                            <button
+                              onClick={() => submitConflict(event.id)}
+                              disabled={!conflictSituation}
+                              style={{ marginLeft: '4px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: '600' }}
+                            >
+                              <Check size={13} /> 확정
+                            </button>
+                            <button
+                              onClick={() => setConflictEditId(null)}
+                              style={{ backgroundColor: 'transparent', color: '#9ca3af', border: '1px solid #334155', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* 타임스탬프 입력 폼 */}
                     {isEditing && (
@@ -211,7 +308,18 @@ const PendingVideos = () => {
                       <MoreVertical size={18} />
                     </button>
                     {isMenuOpen && (
-                      <div style={{ position: 'absolute', top: '28px', right: 0, backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)', zIndex: 100, minWidth: '130px', overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', top: '28px', right: 0, backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.5)', zIndex: 100, minWidth: '140px', overflow: 'hidden' }}>
+                        {isConflict && (
+                          <button
+                            onClick={() => startConflictEdit(event)}
+                            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: 'none', border: 'none', color: '#c084fc', cursor: 'pointer', fontSize: '13px', textAlign: 'left' }}
+                            onMouseEnter={e => e.currentTarget.style.backgroundColor = '#1e293b'}
+                            onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                          >
+                            <GitCompare size={14} /> 클래스 확정
+                          </button>
+                        )}
+                        {!isConflict && (
                         <button
                           onClick={() => startEdit(event)}
                           style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: 'none', border: 'none', color: '#e2e8f0', cursor: 'pointer', fontSize: '13px', textAlign: 'left' }}
@@ -220,6 +328,7 @@ const PendingVideos = () => {
                         >
                           <Pencil size={14} /> 입력
                         </button>
+                        )}
                         <button
                           onClick={() => handleDelete(event.id)}
                           style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px', background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '13px', textAlign: 'left' }}

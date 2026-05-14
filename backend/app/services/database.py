@@ -157,12 +157,16 @@ class SupabaseService:
 
     def get_pending_events(self, limit: int = 100):
         """
-        timestamp가 NULL인 이벤트(처리대기영상)를 반환합니다.
+        처리대기 이벤트를 반환합니다.
+        - timestamp IS NULL: OCR 실패
+        - is_conflict = TRUE: 모델/GPT 분류 충돌
         """
         try:
             response = self.supabase.table('event') \
-                .select('id, summary, timestamp, video_filename, situation, clip_url, event_clips(id, clip_url, start_sec, end_sec, clip_index)') \
-                .is_('timestamp', 'null') \
+                .select('id, summary, timestamp, video_filename, situation, clip_url, '
+                        'gpt_situation, model_situation, is_conflict, '
+                        'event_clips(id, clip_url, start_sec, end_sec, clip_index)') \
+                .or_('timestamp.is.null,is_conflict.eq.true') \
                 .order('id', desc=True) \
                 .limit(limit) \
                 .execute()
@@ -178,14 +182,24 @@ class SupabaseService:
                         clips = [{"clip_url": item['clip_url'], "start_sec": None, "end_sec": None, "clip_index": 1}]
                     else:
                         clips = []
+
+                    conflict_info = None
+                    if item.get('is_conflict'):
+                        conflict_info = {
+                            "gpt_situation":   item.get('gpt_situation'),
+                            "model_situation": item.get('model_situation'),
+                            "recommended":     item.get('situation'),
+                        }
+
                     events.append({
-                        "id": item.get('id'),
-                        "title": item.get('summary', '보안 이벤트 기록'),
-                        "location": item.get('video_filename', '미상'),
-                        "timestamp": None,
-                        "clip_url": clips[0]['clip_url'] if clips else None,
-                        "clips": clips,
-                        "tag": item.get('situation', 'normal'),
+                        "id":           item.get('id'),
+                        "title":        item.get('summary', '보안 이벤트 기록'),
+                        "location":     item.get('video_filename', '미상'),
+                        "timestamp":    item.get('timestamp'),
+                        "clip_url":     clips[0]['clip_url'] if clips else None,
+                        "clips":        clips,
+                        "tag":          item.get('situation', 'normal'),
+                        "conflict":     conflict_info,
                     })
             return events
         except Exception as e:
@@ -234,6 +248,18 @@ class SupabaseService:
                 return {"status": "success", "fixed": fixed, "message": f"{fixed}건 타임스탬프 보정 완료"}
             except Exception as e:
                 return {"status": "error", "message": str(e)}
+
+    def resolve_event_conflict(self, event_id: str, situation: str) -> bool:
+        """분류 충돌 이벤트의 상황을 확정하고 is_conflict를 해제합니다."""
+        try:
+            self.supabase.table('event') \
+                .update({'situation': situation, 'is_conflict': False}) \
+                .eq('id', event_id) \
+                .execute()
+            return True
+        except Exception as e:
+            print(f"[Supabase Error] 충돌 해소 실패: {e}")
+            return False
 
     def delete_event(self, event_id: str) -> bool:
         try:
