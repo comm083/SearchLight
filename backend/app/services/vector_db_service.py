@@ -23,7 +23,7 @@ class VectorDBService:
 
     def _build_index(self):
         try:
-            resp = self.supabase.table('event').select('*, event_intents(*)').execute()
+            resp = self.supabase.table('event').select('*, event_intents(*), event_clips(*)').execute()
             rows = resp.data or []
 
             self.scene_data = []
@@ -40,6 +40,9 @@ class VectorDBService:
                     intents.get('error_sent', ''),
                 ]))
 
+                event_clips_list = row.get('event_clips') or []
+                first_clip_url = event_clips_list[0].get('clip_url') if event_clips_list else row.get('clip_url')
+
                 self.scene_data.append({
                     "id":             row['id'],
                     "summary":        row.get('summary', ''),
@@ -47,7 +50,7 @@ class VectorDBService:
                     "search_text":    search_text,
                     "event_date":     row.get('timestamp'),
                     "video_filename": row.get('video_filename'),
-                    "clip_url":       row.get('clip_url'),
+                    "clip_url":       first_clip_url,
                     "situation":      row.get('situation'),
                     "count_people":   row.get('count_people', 0),
                 })

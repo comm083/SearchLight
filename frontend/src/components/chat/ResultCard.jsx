@@ -5,12 +5,12 @@ const formatTs = (ts) => {
   if (!ts) return '시간 정보 없음';
   const d = new Date(ts);
   if (isNaN(d.getTime())) return ts;
-  const y = d.getUTCFullYear();
-  const m = d.getUTCMonth() + 1;
-  const day = d.getUTCDate();
-  const h = d.getUTCHours();
-  const mi = String(d.getUTCMinutes()).padStart(2, '0');
-  const s = String(d.getUTCSeconds()).padStart(2, '0');
+  const y = d.getFullYear();
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const h = d.getHours();
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  const s = String(d.getSeconds()).padStart(2, '0');
   const ampm = h < 12 ? '오전' : '오후';
   const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
   return `${y}. ${m}. ${day}. ${ampm} ${h12}:${mi}:${s}`;
@@ -19,7 +19,8 @@ const formatTs = (ts) => {
 const ResultCard = ({ res, resultKey, isExpanded, setExpandedResults }) => {
   const [showVideoModal, setShowVideoModal] = useState(false);
 
-  const hasClip = !!res.clip_url;
+  const displayClipUrl = res.clip_url;
+  const hasClip = !!displayClipUrl;
 
   return (
     <>
@@ -33,7 +34,7 @@ const ResultCard = ({ res, resultKey, isExpanded, setExpandedResults }) => {
         >
           {hasClip ? (
             <video
-              src={res.clip_url}
+              src={displayClipUrl}
               style={{width: '100%', height: '100%', objectFit: 'cover'}}
               muted
               preload="metadata"
@@ -69,7 +70,7 @@ const ResultCard = ({ res, resultKey, isExpanded, setExpandedResults }) => {
                 {res.situation}
               </div>
             )}
-            <div style={{fontSize: '13px', color: '#f3f4f6', lineHeight: '1.4', marginBottom: '8px'}}>{res.description}</div>
+            <div style={{fontSize: '13px', color: '#f3f4f6', lineHeight: '1.4', marginBottom: '8px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', textOverflow: 'ellipsis'}}>{res.description}</div>
           </div>
         </div>
       </div>
@@ -78,17 +79,30 @@ const ResultCard = ({ res, resultKey, isExpanded, setExpandedResults }) => {
     {/* 클립 영상 모달 */}
     {showVideoModal && hasClip && (
       <div
-        style={{position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out'}}
+        style={{position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.9)', zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out'}}
         onClick={() => setShowVideoModal(false)}
       >
-        <video
-          src={res.clip_url}
-          style={{maxWidth: '90%', maxHeight: '85%', borderRadius: '8px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)'}}
-          controls
-          autoPlay
-          onClick={e => e.stopPropagation()}
-        />
-        <div style={{position: 'absolute', bottom: '30px', color: '#9ca3af', fontSize: '14px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '8px 16px', borderRadius: '20px'}}>
+        <div style={{maxWidth: '900px', width: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'default'}} onClick={e => e.stopPropagation()}>
+          <video
+            src={displayClipUrl}
+            style={{width: '100%', maxHeight: '65vh', borderRadius: '12px 12px 0 0', backgroundColor: '#000'}}
+            controls
+            autoPlay
+          />
+          <div style={{width: '100%', backgroundColor: '#1f2937', padding: '24px', borderRadius: '0 0 12px 12px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)'}}>
+             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px'}}>
+               <div style={{fontSize: '15px', color: '#3b82f6', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px'}}><Clock size={16} /> {formatTs(res.timestamp)}</div>
+               <div style={{fontSize: '14px', color: '#9ca3af'}}>{res.video_filename}</div>
+             </div>
+             {res.situation && res.situation !== 'normal' && (
+               <div style={{display: 'inline-block', fontSize: '13px', padding: '4px 12px', borderRadius: '8px', backgroundColor: 'rgba(239,68,68,0.15)', color: '#f87171', marginBottom: '12px', fontWeight: 'bold'}}>
+                 {res.situation}
+               </div>
+             )}
+             <div style={{fontSize: '15px', color: '#f9fafb', lineHeight: '1.6', whiteSpace: 'pre-wrap'}}>{res.description}</div>
+          </div>
+        </div>
+        <div style={{marginTop: '24px', color: '#9ca3af', fontSize: '14px', backgroundColor: 'rgba(0,0,0,0.5)', padding: '8px 16px', borderRadius: '20px'}}>
           아무 곳이나 클릭하여 닫기
         </div>
       </div>
