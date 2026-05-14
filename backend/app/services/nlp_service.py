@@ -116,16 +116,16 @@ class NLPService:
             time_label = ''
 
             if ts_raw:
-                # Supabase는 naive UTC를 KST(+9h)로 반환하므로 UTC 기준으로 되돌림
                 try:
-                    from datetime import datetime as _dt
+                    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
                     dt = _dt.fromisoformat(str(ts_raw).replace('Z', '+00:00'))
-                    dt_utc = dt.astimezone(_tz.utc)
-                    date_label = f"[{dt_utc.strftime('%Y-%m-%d')}]"
-                    h = dt_utc.hour
+                    kst = _tz(_td(hours=9))
+                    dt_kst = dt.astimezone(kst)
+                    date_label = f"[{dt_kst.strftime('%Y-%m-%d')}]"
+                    h = dt_kst.hour
                     ampm = '오전' if h < 12 else '오후'
                     h12 = 12 if h == 0 else (h if h <= 12 else h - 12)
-                    time_label = f"[{ampm} {h12}:{dt_utc.strftime('%M:%S')}]"
+                    time_label = f"[{ampm} {h12}:{dt_kst.strftime('%M:%S')}]"
                 except Exception:
                     ts_str = str(ts_raw)
                     date_match = re.search(r'(\d{4}-\d{2}-\d{2})', ts_str)
@@ -135,7 +135,7 @@ class NLPService:
                     if time_match:
                         h, mi, s = int(time_match.group(1)), time_match.group(2), time_match.group(3)
                         ampm = '오전' if h < 12 else '오후'
-                        h12 = h if h <= 12 else h - 12
+                        h12 = 12 if h == 0 else (h if h <= 12 else h - 12)
                         time_label = f"[{ampm} {h12}:{mi}:{s}]"
             
             ts_display = f"{date_label} {time_label}".strip()
