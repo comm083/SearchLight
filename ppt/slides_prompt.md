@@ -160,5 +160,28 @@ Right — Performance metrics card (dark card, cyan numbers):
 
 ### [슬라이드 5]
 ```
-여기에 작성
+Slide 5 title: "Software & Frameworks"
+Subtitle: "SearchLight 시스템 구성 기술 스택"
+Layout: 2 main columns (VLM, NLP) and 1 bottom strip for Common Infrastructure/Frontend.
+
+Left Column (VLM) - Cyan border (#00D2D7):
+- YOLOv8 / YOLO-World (Object Detection)
+- VideoMAE (Video Classification, 7-class, 99.3%)
+- CLIP ViT-B/32 (Image Embedding)
+- EasyOCR (CCTV Timestamp OCR)
+- GPT-4o Vision (Frame Analysis)
+
+Right Column (NLP) - Green border (#48D29B):
+- KoELECTRA (Intent Classification, 6-class)
+- KR-SBERT (Korean Text Embedding)
+- KoBART (STT Post-correction)
+- GPT-4o (Security Report Generation)
+
+Bottom Strip (Common/Infra):
+- Backend: FastAPI
+- Cloud DB: Supabase
+- Event DB: SQLite
+- Vector DB: FAISS
+- Frontend/UI: React, Tailwind CSS, Recharts, Framer Motion
+- Dev Tools: VS Code, GitHub
 ```

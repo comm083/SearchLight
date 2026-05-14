@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Plus, Search, Shield, Clock, User, MoreVertical, LogIn, LogOut, Mic, Square, X, Archive, BarChart2, MessageSquare, Video
+  Plus, Search, Shield, Clock, User, MoreVertical, LogIn, LogOut, Mic, Square, X, Archive, BarChart2, MessageSquare, Video, Folder, ChevronUp, ChevronDown
 } from 'lucide-react';
 
 // Hooks
@@ -32,6 +32,7 @@ const App = () => {
   const [currentView, setCurrentView] = useState('chat');
   const [isTtsEnabled, setIsTtsEnabled] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [isMenuExpanded, setIsMenuExpanded] = useState(true);
 
   const chatEndRef = useRef(null);
 
@@ -108,32 +109,44 @@ const App = () => {
     <div className="app-container">
       {/* Sidebar - Simplified for refactoring */}
       <aside className="sidebar" style={{ width: `${sidebarWidth}px`, flexShrink: 0 }}>
-        <button className={`new-chat-btn ${currentView === 'analysis' ? 'active' : ''}`} style={{ marginBottom: '8px', backgroundColor: currentView === 'analysis' ? 'rgba(168,85,247,0.2)' : 'rgba(168,85,247,0.08)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.2)' }} onClick={() => setCurrentView('analysis')}><Video size={18} /><span>영상 분석</span></button>
-        <button className={`new-chat-btn ${currentView === 'archive' ? 'active' : ''}`} style={{ marginBottom: '8px', backgroundColor: currentView === 'archive' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.1)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.2)' }} onClick={() => setCurrentView('archive')}><Archive size={18} /><span>영상 보관함</span></button>
-        <button
-          className={`new-chat-btn ${currentView === 'pending' ? 'active' : ''}`}
-          style={{ marginBottom: '8px', position: 'relative', backgroundColor: currentView === 'pending' ? (pendingCount > 0 ? 'rgba(234,179,8,0.25)' : 'rgba(34,197,94,0.2)') : (pendingCount > 0 ? 'rgba(234,179,8,0.1)' : 'rgba(34,197,94,0.08)'), color: pendingCount > 0 ? '#fbbf24' : '#4ade80', border: `1px solid ${pendingCount > 0 ? 'rgba(234,179,8,0.3)' : 'rgba(34,197,94,0.2)'}` }}
-          onClick={() => setCurrentView('pending')}
-        >
-          <span style={{ fontSize: '16px' }}>⏳</span>
-          <span>처리대기 영상</span>
-          {pendingCount > 0 && (
-            <span style={{ position: 'absolute', top: '6px', right: '8px', backgroundColor: '#f59e0b', color: '#0f172a', borderRadius: '10px', fontSize: '11px', fontWeight: '700', padding: '1px 6px', minWidth: '18px', textAlign: 'center', lineHeight: '16px' }}>
-              {pendingCount}
-            </span>
-          )}
+        <button className="new-chat-btn" onClick={() => { startNewChat(); setCurrentView('chat'); }} style={{ marginBottom: '20px' }}>
+          <Plus size={18} /><span>새 채팅</span>
         </button>
-        <button className={`new-chat-btn ${currentView === 'dashboard' ? 'active' : ''}`} style={{ marginBottom: '10px', backgroundColor: currentView === 'dashboard' ? 'rgba(249, 115, 22, 0.2)' : 'rgba(249, 115, 22, 0.08)', color: '#fb923c', border: '1px solid rgba(249, 115, 22, 0.2)' }} onClick={() => setCurrentView('dashboard')}><BarChart2 size={18} /><span>통계 대시보드</span></button>
-        {user?.role === '관리자' && (
-          <button
-            className={`new-chat-btn ${currentView === 'feedback' ? 'active' : ''}`}
-            style={{ marginBottom: '8px', backgroundColor: currentView === 'feedback' ? 'rgba(139,92,246,0.2)' : 'rgba(139,92,246,0.08)', color: '#a78bfa', border: '1px solid rgba(139,92,246,0.2)' }}
-            onClick={() => setCurrentView('feedback')}
+
+        <div style={{ border: '1px solid rgba(59, 130, 246, 0.3)', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px', backgroundColor: 'rgba(59, 130, 246, 0.05)' }}>
+          <button 
+            onClick={() => setIsMenuExpanded(!isMenuExpanded)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '12px', background: 'transparent', border: 'none', color: '#60a5fa', cursor: 'pointer' }}
           >
-            <MessageSquare size={18} /><span>피드백 관리</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Folder size={16} />
+              <span style={{ fontSize: '13px', fontWeight: '500' }}>영상 관리 및 분석</span>
+            </div>
+            {isMenuExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
-        )}
-        <button className="new-chat-btn" onClick={() => { startNewChat(); setCurrentView('chat'); }}><Plus size={18} /><span>새 채팅</span></button>
+          
+          {isMenuExpanded && (
+            <div style={{ display: 'flex', flexDirection: 'column', padding: '0 8px 8px 8px', gap: '4px' }}>
+               <button className={`sidebar-menu-item ${currentView === 'analysis' ? 'active-analysis' : ''}`} onClick={() => setCurrentView('analysis')}><Video size={15} /><span>영상 분석</span></button>
+               <button className={`sidebar-menu-item ${currentView === 'archive' ? 'active-archive' : ''}`} onClick={() => setCurrentView('archive')}><Archive size={15} /><span>영상 보관함</span></button>
+               <button className={`sidebar-menu-item ${currentView === 'pending' ? (pendingCount > 0 ? 'active-pending-warning' : 'active-pending-success') : ''}`} onClick={() => setCurrentView('pending')} style={{ position: 'relative' }}>
+                  <Clock size={15} />
+                  <span>처리대기 영상</span>
+                  {pendingCount > 0 && (
+                    <span style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', right: '12px', backgroundColor: currentView === 'pending' ? '#fbbf24' : '#374151', color: currentView === 'pending' ? '#1f2937' : '#9ca3af', borderRadius: '4px', fontSize: '10px', fontWeight: '600', padding: '2px 6px' }}>
+                      {pendingCount}
+                    </span>
+                  )}
+               </button>
+               <button className={`sidebar-menu-item ${currentView === 'dashboard' ? 'active-dashboard' : ''}`} onClick={() => setCurrentView('dashboard')}><BarChart2 size={15} /><span>통계 대시보드</span></button>
+               {user?.role === '관리자' && (
+                 <button className={`sidebar-menu-item ${currentView === 'feedback' ? 'active-feedback' : ''}`} onClick={() => setCurrentView('feedback')}><MessageSquare size={15} /><span>피드백 관리</span></button>
+               )}
+            </div>
+          )}
+        </div>
+
+        <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.1)', margin: '0 0 20px 0' }} />
         <div className="search-box">
           <Search className="search-icon" size={14} />
           <input type="text" placeholder="최근 기록 검색..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
