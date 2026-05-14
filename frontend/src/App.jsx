@@ -314,7 +314,7 @@ const App = () => {
               {messages.map((msg, i) => (
                 <div key={i}>
                   <MessageItem msg={msg} expandedResults={expandedResults} setExpandedResults={setExpandedResults} index={i} sessionId={currentSessionId} />
-                  {msg.results?.map((res, j) => (
+                  {[...(msg.results || [])].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).map((res, j) => (
                     <div key={j} style={{marginBottom: '15px'}}>
                        <ResultCard res={res} resultKey={`${i}-${j}`} isExpanded={expandedResults[`${i}-${j}`]} setExpandedResults={setExpandedResults} />
                     </div>
